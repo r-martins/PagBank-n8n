@@ -1,0 +1,8 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="60" height="60" rx="8" fill="#00AEEF"/>
+  <path d="M15 20C15 18.8954 15.8954 18 17 18H43C44.1046 18 45 18.8954 45 20V40C45 41.1046 44.1046 42 43 42H17C15.8954 42 15 41.1046 15 40V20Z" fill="white"/>
+  <path d="M20 25H40V35H20V25Z" fill="#00AEEF"/>
+  <circle cx="25" cy="30" r="2" fill="white"/>
+  <circle cx="35" cy="30" r="2" fill="white"/>
+  <text x="30" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="white">PagBank</text>
+</svg>

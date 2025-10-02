@@ -1,0 +1,171 @@
+{
+  "name": "Processador de Webhooks PagBank",
+  "nodes": [
+    {
+      "parameters": {
+        "events": ["PAID", "DECLINED"],
+        "paymentMethods": [],
+        "minAmount": 0,
+        "maxAmount": 0
+      },
+      "id": "pagbank-webhook",
+      "name": "Webhook PagBank",
+      "type": "n8n-nodes-pagbank.pagBankWebhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "status-paid",
+              "leftValue": "={{$json.eventType}}",
+              "rightValue": "PAID",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-payment-status",
+      "name": "Verificar Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "orders",
+        "updateKey": "order_id",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "paid",
+            "paid_at": "={{$json.paidAt}}",
+            "payment_method": "={{$json.paymentMethod}}",
+            "amount": "={{$json.amount}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-order-paid",
+      "name": "Atualizar Pedido Pago",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@meusite.com",
+        "toEmail": "={{$json.customer.email}}",
+        "subject": "Pagamento Aprovado - Pedido {{$json.referenceId}}",
+        "message": "Olá {{$json.customer.name}},\n\nSeu pagamento foi aprovado!\n\nPedido: {{$json.referenceId}}\nValor: R$ {{$json.amountInReais}}\nMétodo: {{$json.paymentMethod}}\n\nObrigado pela compra!",
+        "options": {}
+      },
+      "id": "send-confirmation-email",
+      "name": "Enviar Email de Confirmação",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "orders",
+        "updateKey": "order_id",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "declined",
+            "declined_at": "={{$json.webhookReceivedAt}}",
+            "decline_reason": "={{$json.rawData.charges[0].payment_response.message}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-order-declined",
+      "name": "Atualizar Pedido Negado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@meusite.com",
+        "toEmail": "={{$json.customer.email}}",
+        "subject": "Pagamento Negado - Pedido {{$json.referenceId}}",
+        "message": "Olá {{$json.customer.name}},\n\nSeu pagamento foi negado.\n\nPedido: {{$json.referenceId}}\nMotivo: {{$json.rawData.charges[0].payment_response.message}}\n\nTente novamente com outro método de pagamento.",
+        "options": {}
+      },
+      "id": "send-decline-email",
+      "name": "Enviar Email de Negativa",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "pagbank-webhook": {
+      "main": [
+        [
+          {
+            "node": "check-payment-status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-payment-status": {
+      "main": [
+        [
+          {
+            "node": "update-order-paid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "update-order-declined",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-order-paid": {
+      "main": [
+        [
+          {
+            "node": "send-confirmation-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-order-declined": {
+      "main": [
+        [
+          {
+            "node": "send-decline-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "name": "Pagamento PIX Automático",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-pix",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook PIX",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "createPixOrder",
+        "referenceId": "={{$json.orderId}}",
+        "customer": {
+          "customerInfo": {
+            "name": "={{$json.customer.name}}",
+            "email": "={{$json.customer.email}}",
+            "taxId": "={{$json.customer.cpf}}"
+          }
+        },
+        "items": {
+          "item": [
+            {
+              "name": "={{$json.product.name}}",
+              "quantity": "={{$json.product.quantity}}",
+              "unitAmount": "={{$json.product.price * 100}}"
+            }
+          ]
+        },
+        "pixExpirationDate": "={{new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()}}",
+        "notificationUrls": "https://meusite.com/webhook/pagbank"
+      },
+      "id": "create-pix-order",
+      "name": "Criar Pedido PIX",
+      "type": "n8n-nodes-pagbank.pagBank",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@meusite.com",
+        "toEmail": "={{$json.customer.email}}",
+        "subject": "QR Code PIX - Pedido {{$json.referenceId}}",
+        "message": "Olá {{$json.customer.name}},\n\nSeu QR Code PIX foi gerado:\n\n{{$json.qr_codes[0].text}}\n\nEscaneie o QR Code no seu app do banco para pagar.\n\nObrigado!",
+        "options": {}
+      },
+      "id": "send-pix-email",
+      "name": "Enviar QR Code PIX",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({success: true, qrCode: $json.qr_codes[0].text, orderId: $json.referenceId})}}"
+      },
+      "id": "webhook-response",
+      "name": "Resposta Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "create-pix-order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-pix-order": {
+      "main": [
+        [
+          {
+            "node": "send-pix-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send-pix-email": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

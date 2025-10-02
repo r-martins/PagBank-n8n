@@ -1,0 +1,110 @@
+{
+  "name": "E-commerce com PagBank",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-ecommerce",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook E-commerce",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "ecommerce-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "createPaymentLink",
+        "referenceId": "={{$json.orderId}}",
+        "customer": {
+          "customerInfo": {
+            "name": "={{$json.customer.name}}",
+            "email": "={{$json.customer.email}}",
+            "taxId": "={{$json.customer.cpf}}"
+          }
+        },
+        "items": {
+          "item": [
+            {
+              "name": "={{$json.product.name}}",
+              "quantity": "={{$json.product.quantity}}",
+              "unitAmount": "={{$json.product.price * 100}}"
+            }
+          ]
+        },
+        "paymentMethods": ["CREDIT_CARD", "PIX", "BOLETO"],
+        "expirationDate": "={{new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()}}",
+        "redirectUrl": "https://meusite.com/obrigado",
+        "notificationUrls": "https://meusite.com/webhook/pagbank"
+      },
+      "id": "create-payment-link",
+      "name": "Criar Link de Pagamento",
+      "type": "n8n-nodes-pagbank.pagBank",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@meusite.com",
+        "toEmail": "={{$json.customer.email}}",
+        "subject": "Link de Pagamento - Pedido {{$json.referenceId}}",
+        "message": "Olá {{$json.customer.name}},\n\nSeu link de pagamento foi gerado:\n{{$json.links[1].href}}\n\nObrigado pela compra!",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Enviar Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({success: true, paymentLink: $json.links[1].href, orderId: $json.referenceId})}}"
+      },
+      "id": "webhook-response",
+      "name": "Resposta Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "create-payment-link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-payment-link": {
+      "main": [
+        [
+          {
+            "node": "send-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send-email": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
