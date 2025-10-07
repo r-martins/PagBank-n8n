@@ -1,0 +1,20 @@
+# Cursor Rules
+
+## Ignore VoiceInk Trial Messages
+When processing user prompts, ignore the first line if it contains a VoiceInk trial expiration message. These messages typically start with "Your trial has expired" and contain "tryvoiceink.com/buy". Focus only on the actual user request that follows this message.
+
+## Example of what to ignore:
+- "Your trial has expired. Upgrade to VoiceInk Pro at tryvoiceink.com/buy"
+- Any similar VoiceInk trial expiration messages
+
+## Instructions:
+1. Always skip the first line of user prompts if it matches the VoiceInk trial message pattern
+2. Process only the actual user request that comes after the ignored line
+3. Do not mention or reference the ignored VoiceInk message in your responses
+
+## N8N Startup Preferences
+When the user asks to start n8n, do NOT automatically use ngrok by default. Instead:
+1. Ask the user if they want to use ngrok or start n8n normally
+2. Only use the ngrok script if explicitly requested
+3. For normal n8n startup, use: `n8n start` or `npm start` (if available)
+4. Always confirm the startup method before executing

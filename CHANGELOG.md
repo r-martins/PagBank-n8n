@@ -25,7 +25,7 @@
 - **Platform**: `n8n`
 - **Platform-Version**: `1.113.3`
 - **Module-Version**: `1.0.0`
-- **Authentication**: `Bearer {connectKey}`
+- **Authorization**: `Bearer {connectKey}`
 
 #### 5. **URL de Documentação Atualizada**
 - **Antes**: `https://developer.pagbank.com.br`
@@ -47,7 +47,7 @@ nodes/
 #### Headers Enviados Automaticamente
 ```javascript
 {
-  'Authentication': 'Bearer {connectKey}',
+  'Authorization': 'Bearer {connectKey}',
   'Platform': 'n8n',
   'Platform-Version': '1.113.3',
   'Module-Version': '1.0.0'

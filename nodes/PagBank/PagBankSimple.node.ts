@@ -189,11 +189,11 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'URLs de Notificação',
-				name: 'notificationUrls',
+				displayName: 'URL de Notificação',
+				name: 'notificationUrl',
 				type: 'string',
 				default: '',
-				description: 'URLs para receber notificações de pagamento (separadas por vírgula)',
+				description: 'URL para receber notificações de pagamento (máximo 100 caracteres)',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink', 'createPixOrder'],
@@ -225,14 +225,16 @@ export class PagBankSimple implements INodeType {
 				const operation = this.getNodeParameter('operation', i) as string;
 				let responseData: any;
 
+				const nodeInstance = new PagBankSimple();
+				
 				if (operation === 'createPaymentLink') {
-					responseData = await this.createPaymentLink(i);
+					responseData = await nodeInstance.createPaymentLink.call(this, i);
 				} else if (operation === 'createPixOrder') {
-					responseData = await this.createPixOrder(i);
+					responseData = await nodeInstance.createPixOrder.call(this, i);
 				} else if (operation === 'getOrderStatus') {
-					responseData = await this.getOrderStatus(i);
+					responseData = await nodeInstance.getOrderStatus.call(this, i);
 				} else if (operation === 'validateConnectKey') {
-					responseData = await this.validateConnectKey(i);
+					responseData = await nodeInstance.validateConnectKey.call(this, i);
 				} else {
 					throw new NodeOperationError(this.getNode(), `Operação não suportada: ${operation}`);
 				}
@@ -256,7 +258,7 @@ export class PagBankSimple implements INodeType {
 		return [returnData];
 	}
 
-	private async createPaymentLink(itemIndex: number): Promise<any> {
+	private async createPaymentLink(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const referenceId = this.getNodeParameter('referenceId', itemIndex) as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
@@ -266,7 +268,7 @@ export class PagBankSimple implements INodeType {
 		const unitAmount = this.getNodeParameter('unitAmount', itemIndex) as number;
 		const paymentMethods = this.getNodeParameter('paymentMethods', itemIndex) as string[];
 		const redirectUrl = this.getNodeParameter('redirectUrl', itemIndex) as string;
-		const notificationUrls = this.getNodeParameter('notificationUrls', itemIndex) as string;
+		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
@@ -295,8 +297,12 @@ export class PagBankSimple implements INodeType {
 			body.redirect_url = redirectUrl;
 		}
 
-		if (notificationUrls) {
-			body.notification_urls = notificationUrls.split(',').map(url => url.trim());
+		if (notificationUrl) {
+			// Validar comprimento da URL (máximo 100 caracteres)
+			if (notificationUrl.length > 100) {
+				throw new NodeOperationError(this.getNode(), 'URL de notificação deve ter no máximo 100 caracteres');
+			}
+			body.notification_urls = [notificationUrl.trim()];
 		}
 
 		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
@@ -311,7 +317,7 @@ export class PagBankSimple implements INodeType {
 			method: 'POST',
 			url,
 			headers: {
-				'Authentication': `Bearer ${(credentials as any).connectKey}`,
+				'Authorization': `Bearer ${(credentials as any).connectKey}`,
 				'Platform': (credentials as any).platform || 'n8n',
 				'Content-Type': 'application/json',
 			},
@@ -322,8 +328,8 @@ export class PagBankSimple implements INodeType {
 		const response = await this.helpers.request(options);
 		return response;
 	}
-
-	private async createPixOrder(itemIndex: number): Promise<any> {
+	
+	private async createPixOrder(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const referenceId = this.getNodeParameter('referenceId', itemIndex) as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
@@ -331,7 +337,7 @@ export class PagBankSimple implements INodeType {
 		const productName = this.getNodeParameter('productName', itemIndex) as string;
 		const quantity = this.getNodeParameter('quantity', itemIndex) as number;
 		const unitAmount = this.getNodeParameter('unitAmount', itemIndex) as number;
-		const notificationUrls = this.getNodeParameter('notificationUrls', itemIndex) as string;
+		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
@@ -363,8 +369,12 @@ export class PagBankSimple implements INodeType {
 			],
 		};
 
-		if (notificationUrls) {
-			body.notification_urls = notificationUrls.split(',').map(url => url.trim());
+		if (notificationUrl) {
+			// Validar comprimento da URL (máximo 100 caracteres)
+			if (notificationUrl.length > 100) {
+				throw new NodeOperationError(this.getNode(), 'URL de notificação deve ter no máximo 100 caracteres');
+			}
+			body.notification_urls = [notificationUrl.trim()];
 		}
 
 		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
@@ -379,7 +389,7 @@ export class PagBankSimple implements INodeType {
 			method: 'POST',
 			url,
 			headers: {
-				'Authentication': `Bearer ${(credentials as any).connectKey}`,
+				'Authorization': `Bearer ${(credentials as any).connectKey}`,
 				'Platform': (credentials as any).platform || 'n8n',
 				'Content-Type': 'application/json',
 			},
@@ -391,7 +401,7 @@ export class PagBankSimple implements INodeType {
 		return response;
 	}
 
-	private async getOrderStatus(itemIndex: number): Promise<any> {
+	private async getOrderStatus(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const orderId = this.getNodeParameter('orderId', itemIndex) as string;
 
 		const credentials = await this.getCredentials('pagBankConnect');
@@ -411,7 +421,7 @@ export class PagBankSimple implements INodeType {
 			method: 'GET',
 			url,
 			headers: {
-				'Authentication': `Bearer ${(credentials as any).connectKey}`,
+				'Authorization': `Bearer ${(credentials as any).connectKey}`,
 				'Platform': (credentials as any).platform || 'n8n',
 			},
 			json: true,
@@ -421,14 +431,14 @@ export class PagBankSimple implements INodeType {
 		return response;
 	}
 
-	private async validateConnectKey(itemIndex: number): Promise<any> {
+	private async validateConnectKey(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
 			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank Connect não encontradas');
 		}
 
 		const connectKey = (credentials as any).connectKey;
-		const validation = await validateConnectKey.call(this, connectKey);
+		const validation = await validateConnectKey.call(this as any, connectKey);
 		
 		return {
 			...validation,

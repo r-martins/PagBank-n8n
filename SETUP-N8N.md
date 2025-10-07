@@ -171,6 +171,87 @@ npm install /Users/martins/www/pagbank-n8n
 5. Copie a URL do webhook
 6. Use essa URL nas notificações dos pedidos
 
+## 🔗 Configuração de Webhooks
+
+### Usando URLs Locais (Padrão)
+Por padrão, o n8n usa URLs locais para webhooks:
+```
+http://localhost:5678/webhook/[workflow-id]/[webhook-name]
+```
+
+**Vantagens**:
+- ✅ Mais rápido e simples
+- ✅ Não requer configuração adicional
+- ✅ Ideal para desenvolvimento local
+
+**Quando usar**:
+- Desenvolvimento local
+- Testes internos
+- Quando você tem acesso direto ao servidor
+
+### Usando ngrok para Webhooks Externos
+Para receber webhooks de serviços externos (como PagBank), você precisa de uma URL pública.
+
+**Opção 1: Script Automático**
+```bash
+# Usar o script incluído (inicia n8n + ngrok)
+./start-n8n-with-ngrok.sh
+```
+
+**Opção 2: Configuração Manual**
+```bash
+# 1. Instalar ngrok
+npm install -g ngrok
+
+# 2. Iniciar ngrok em outro terminal
+ngrok http 5678
+
+# 3. Configurar variáveis de ambiente
+export WEBHOOK_TUNNEL_URL="https://seu-subdomain.ngrok-free.app"
+export WEBHOOK_URL="https://seu-subdomain.ngrok-free.app"
+
+# 4. Iniciar n8n
+n8n start
+```
+
+**Vantagens do ngrok**:
+- ✅ URL pública para webhooks externos
+- ✅ HTTPS automático
+- ✅ Fácil de configurar
+
+**Desvantagens**:
+- ❌ URL muda a cada reinicialização (versão gratuita)
+- ❌ Requer ngrok rodando
+- ❌ Mais complexo para desenvolvimento
+
+### Controlando o Tipo de URL
+
+**Para usar apenas URLs locais**:
+```bash
+# Limpar variáveis de webhook
+unset WEBHOOK_TUNNEL_URL WEBHOOK_URL
+
+# Iniciar n8n
+n8n start
+```
+
+**Para usar ngrok**:
+```bash
+# Definir variáveis de webhook
+export WEBHOOK_TUNNEL_URL="https://9b1d9ff42005.ngrok-free.app"
+export WEBHOOK_URL="https://9b1d9ff42005.ngrok-free.app"
+
+# Iniciar n8n
+n8n start
+```
+
+**Verificação**:
+- Acesse http://localhost:5678
+- Crie um webhook node
+- Verifique se a URL é do tipo desejado:
+  - Local: `http://localhost:5678/webhook/...`
+  - ngrok: `https://xxxxx.ngrok-free.app/webhook/...`
+
 ## 🐛 Solução de Problemas
 
 ### Erro: "Node not found"
@@ -200,6 +281,7 @@ npm install
 node build.js
 ```
 
+
 ## 📊 Monitoramento
 
 ### Logs do n8n
@@ -215,7 +297,7 @@ docker logs n8n
 ```bash
 # Testar conectividade
 curl -X GET "https://ws.pbintegracoes.com/pspro/v7/connect/ws/checkouts?isSandbox=1" \
-  -H "Authentication: Bearer CONSANDBOX..." \
+  -H "Authorization: Bearer CONSANDBOX..." \
   -H "Platform: n8n"
 ```
 

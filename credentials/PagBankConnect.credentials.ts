@@ -24,7 +24,7 @@ export class PagBankConnect implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				'Authentication': '=Bearer {{$credentials.connectKey}}',
+				'Authorization': '=Bearer {{$credentials.connectKey}}',
 				'Platform': 'n8n',
 				'Platform-Version': '1.113.3',
 				'Module-Version': '1.0.0',

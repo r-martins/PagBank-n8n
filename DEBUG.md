@@ -43,7 +43,7 @@ node debug-connect-key.js CONSANDBOX_sua_connect_key_aqui
 
 - [ ] Connect Key válida e ativa
 - [ ] Ambiente correto (Sandbox vs Produção)
-- [ ] Headers corretos (Authentication, Platform, etc.)
+- [ ] Headers corretos (Authorization, Platform, etc.)
 - [ ] URL da API correta
 - [ ] Método HTTP correto (GET)
 

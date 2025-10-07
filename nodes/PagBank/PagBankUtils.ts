@@ -39,7 +39,7 @@ export async function pagBankConnectRequest(
 		method,
 		url,
 		headers: {
-			'Authentication': `Bearer ${connectKey}`,
+			'Authorization': `Bearer ${connectKey}`,
 			'Platform': 'n8n',
 			'Platform-Version': '1.113.3',
 			'Module-Version': '1.0.0',
@@ -86,7 +86,7 @@ export async function validateConnectKey(
 			method: 'GET',
 			url,
 			headers: {
-				'Authentication': `Bearer ${connectKey}`,
+				'Authorization': `Bearer ${connectKey}`,
 				'Platform': 'n8n',
 				'Platform-Version': '1.113.3',
 				'Module-Version': '1.0.0',

@@ -25,7 +25,7 @@ async function testConnectKey(connectKey) {
       path: isSandbox ? '/pspro/v7/connect/connectInfo?isSandbox=1' : '/pspro/v7/connect/connectInfo',
       method: 'GET',
       headers: {
-        'Authentication': `Bearer ${connectKey}`,
+        'Authorization': `Bearer ${connectKey}`,
         'Platform': 'n8n',
         'Platform-Version': '1.113.3',
         'Module-Version': '1.0.0',
