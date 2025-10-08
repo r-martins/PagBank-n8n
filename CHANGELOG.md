@@ -104,3 +104,30 @@ const url = isSandbox ? `${baseURL}${endpoint}?isSandbox=1` : `${baseURL}${endpo
 ---
 
 **🎉 A integração agora está mais simples e alinhada com a marca PagBank Connect!**
+
+---
+
+## v1.0.1 - 2025-01-02
+
+### ✅ Novas Funcionalidades
+
+#### **Obtenção Automática de Chave Pública de Criptografia**
+- **Endpoint**: `/connect/ws/public-keys`
+- **Método**: POST
+- **Body**: `{ "type": "card" }`
+- **Funcionalidade**: Chave pública obtida automaticamente antes da criptografia
+- **Benefício**: Usuário não precisa mais inserir a chave manualmente
+- **Segurança**: Chave sempre atualizada e válida
+
+#### **Fluxo de Criptografia de Cartão Atualizado**
+1. **Obter chave pública** → `/connect/ws/public-keys`
+2. **Criptografar dados** → Usar chave pública obtida
+3. **Criar pedido** → Enviar token criptografado
+
+#### **Melhorias na Experiência do Usuário**
+- **Removido**: Campo "Chave Pública de Criptografia" dos parâmetros
+- **Adicionado**: Obtenção automática da chave
+- **Simplificado**: Processo de criação de pedidos de cartão
+- **Logs**: Informações detalhadas sobre o processo de criptografia
+
+**🔐 Agora a criptografia de cartão é totalmente automática e segura!**
