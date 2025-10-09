@@ -1,0 +1,108 @@
+{
+  "name": "Criar código pix",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c92955dd-6eb5-459c-8aba-dc78f577ed68",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "referenceId": "teste123",
+        "customerName": "Teste Pagbank",
+        "customerEmail": "teste20251071458@ricardomartins.net.br",
+        "customerTaxId": "01234567890",
+        "items": {
+          "itemProperties": [
+            {
+              "name": "Produto de Teste",
+              "reference_id": "teste123",
+              "unit_amount": 100
+            }
+          ]
+        },
+        "notificationUrl": "=https://9b1d9ff42005.ngrok-free.app/webhook/799b3531-dd3f-4014-9f79-33cc8045b9b6/pagbank-webhook"
+      },
+      "type": "CUSTOM.pagBank",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "61532330-4dd8-4e43-a9bd-99ca5df0f8a9",
+      "name": "PagBank",
+      "credentials": {
+        "pagBankConnect": {
+          "id": "pROOvlgmsgZ9cgnf",
+          "name": "PagBank Connect Sandbox"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://webhook.site/d40f20d2-ffe2-418f-9322-219a1d46e16d",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Link de pagamento criado",
+              "value": "={{ $json.links[1].href }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "987a9075-f506-4829-b794-4732d468a0e1",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "PagBank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PagBank": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "626fb514-389e-496c-aa45-270e8a989ffe",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9a99d01018ec13ad955f61f24f7e957cf582000f8de366298d3b23c276687e34"
+  },
+  "id": "eieAHk04Z4l0HDXS",
+  "tags": []
+}

@@ -1,0 +1,66 @@
+{
+  "name": "Atualização de pedidos",
+  "nodes": [
+    {
+      "parameters": {
+        "addCalculatedFields": false
+      },
+      "type": "CUSTOM.pagBankWebhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "48fa0430-0382-41f0-baf9-c197ba247b71",
+      "name": "PagBank Connect Webhook",
+      "webhookId": "799b3531-dd3f-4014-9f79-33cc8045b9b6"
+    },
+    {
+      "parameters": {
+        "url": "https://webhook.site/d40f20d2-ffe2-418f-9322-219a1d46e16d",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=Notificação Recebida em {{ $today }}",
+              "value": "={{ $json.rawData }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "baddd28c-2c49-4c4b-9f27-07306c6ab68c",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "PagBank Connect Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "461dbed3-d1c9-46da-98b6-f15a6e4a0c23",
+  "meta": {
+    "instanceId": "9a99d01018ec13ad955f61f24f7e957cf582000f8de366298d3b23c276687e34"
+  },
+  "id": "h8kNppxSWBIMyL07",
+  "tags": []
+}

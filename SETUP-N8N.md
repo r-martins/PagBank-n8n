@@ -311,9 +311,7 @@ curl -X GET "https://ws.pbintegracoes.com/pspro/v7/connect/ws/checkouts?isSandbo
 ## 📚 Recursos Adicionais
 
 - **Documentação n8n**: https://docs.n8n.io/
-- **Documentação PagBank**: https://developer.pagbank.com.br
 - **Exemplos de Workflows**: `/examples/` folder
-- **Suporte**: ricardo@pbintegracoes.com
 
 ## ✅ Checklist de Verificação
 

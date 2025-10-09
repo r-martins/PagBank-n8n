@@ -1,0 +1,120 @@
+{
+  "name": "Criar pagamento com cartão",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d99ba58e-4254-4de1-8d94-a39296c5652d",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "createCreditCardCharge",
+        "customerName": "Teste Pagbank",
+        "customerEmail": "teste20251071458@ricardomartins.net.br",
+        "customerTaxId": "01234567890",
+        "items": {
+          "itemProperties": [
+            {
+              "name": "produto 1",
+              "reference_id": "prod1",
+              "unit_amount": 3444
+            },
+            {
+              "name": "produ",
+              "reference_id": "fsgdfg",
+              "unit_amount": 444
+            }
+          ]
+        },
+        "notificationUrl": "=https://9b1d9ff42005.ngrok-free.app/webhook/799b3531-dd3f-4014-9f79-33cc8045b9b6/pagbank-webhook",
+        "cardData": {
+          "card": {
+            "number": "5200000000001005",
+            "holder": "john doe",
+            "expMonth": "01",
+            "expYear": "2026",
+            "securityCode": "134"
+          }
+        }
+      },
+      "type": "CUSTOM.pagBank",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3d1e987f-1416-43c7-b883-55609988df16",
+      "name": "PagBank",
+      "credentials": {
+        "pagBankConnect": {
+          "id": "pROOvlgmsgZ9cgnf",
+          "name": "PagBank Connect Sandbox"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://webhook.site/d40f20d2-ffe2-418f-9322-219a1d46e16d",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Link de pagamento criado"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "d68f95e2-83e2-404f-8628-460e1cb52168",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "PagBank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PagBank": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0d80e14b-fffb-4116-8d58-1370236f136a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9a99d01018ec13ad955f61f24f7e957cf582000f8de366298d3b23c276687e34"
+  },
+  "id": "q2SrhvYlxMgOIYEE",
+  "tags": []
+}
