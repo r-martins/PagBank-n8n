@@ -1,9 +1,10 @@
 {
   "name": "n8n-nodes-pagbank-connect",
   "version": "1.0.0",
-  "description": "n8n integration with PagBank Connect for Brazilian payment processing (PIX, Boleto, Credit Card, Recurring payments, etc)",
+  "description": "n8n integration with PagBank Connect for Brazilian payment processing (PIX, Boleto, Credit Card, Payment Link, etc)",
   "keywords": [
     "n8n-community-node-package",
+    "n8n-community-node",
     "pagbank",
     "pagseguro",
     "payment",
@@ -40,7 +41,8 @@
       "dist/credentials/PagBankConnect.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/PagBank/PagBankSimple.node.js"
+      "dist/nodes/PagBank/PagBankSimple.node.js",
+      "dist/nodes/PagBank/PagBankWebhook.node.js"
     ]
   },
   "dependencies": {

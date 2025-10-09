@@ -8,9 +8,11 @@ Integração do n8n com PagBank Connect para processamento de pagamentos brasile
 - ✅ **Cartão de Crédito/Débito** - Processamento seguro de cartões
 - ✅ **Boleto** - Boletos bancários para pagamento
 - ✅ **Links de Pagamento** - Checkout personalizado
-- ✅ **Assinaturas Recorrentes** - Pagamentos recorrentes
+- ✅ **Assinaturas Recorrentes** - Pagamentos recorrentes (em breve)
 - ✅ **Webhooks** - Notificações em tempo real
 - ✅ **Ambiente Sandbox** - Testes seguros
+- ✅ **Parceiro Oficial** - [PagBank Integrações](https://pbintegracoes.com/?utm_source=n8n) é parceiro Oficial PagBank desde 2014.
+- ✅ **Taxas reduzidas** - Você paga menos taxas no PagBank ao usar nossas integrações
 
 ## Instalação
 
@@ -22,82 +24,28 @@ npm install n8n-nodes-pagbank-connect
 
 ### 1. Obter Credenciais
 
-1. Acesse [PagBank Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n)
-2. Crie uma conta ou faça login
-3. Obtenha sua Connect Key
-4. O ambiente é detectado automaticamente (CONSANDBOX = Sandbox, CON = Produção)
+Acesse [PagBank Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n) para obter sua Connect Key Gratuitamente
+
+Se precisar de uma Connect Key de Testes, [clique aqui](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
 
 ### 2. Configurar no n8n
 
-1. Adicione as credenciais do PagBank Connect
-2. Configure sua Connect Key
-3. Os headers são configurados automaticamente
+1. Adicione sua Connect key nas credenciais do PagBank Connect
+2. Clique em Salvar e veja se a conexão foi realizada com sucesso.
 
 ## Nós Disponíveis
 
 ### PagBank (Principal)
-- **Criar Link de Pagamento** - Gera links de checkout
+- **Criar Link de Pagamento** - Gera links de checkout para o cliente pagar no PagBank
 - **Criar Pedido PIX** - Cria pagamentos PIX
-- **Criar Pedido Boleto** - Gera boletos bancários
-- **Criar Pedido Cartão** - Processa cartões
-- **Criar Assinatura Recorrente** - Pagamentos recorrentes
-- **Consultar Status** - Verifica status de pagamentos
+- **Criar Cobrança Cartão** - Processa um pagamento com o cartão de crédito e dados informados
+- **Consultar status do pedido** - Consulta o status de um ORDER junto ao PagBank (deve ter sido gerado com esta connect key)
+- **Validar Connect Key** - Valida Connect Key configurada em suas credenciais
 
 ### PagBank Webhook
-- **Webhook de Pagamento** - Recebe notificações
+- **Webhook de Pagamento** - Recebe notificações. É possível filtrar por notificações por status de pagamento, meios de pagamento ou motivo de negação.
 
-## Exemplos de Uso
-
-### 1. Criar Link de Pagamento
-
-```json
-{
-  "referenceId": "PEDIDO-123",
-  "customer": {
-    "name": "João Silva",
-    "email": "joao@email.com",
-    "taxId": "12345678901"
-  },
-  "items": [
-    {
-      "name": "Produto Teste",
-      "quantity": 1,
-      "unitAmount": 10000
-    }
-  ],
-  "paymentMethods": ["CREDIT_CARD", "PIX"],
-  "expirationDate": "2025-12-31T23:59:59Z"
-}
-```
-
-### 2. Criar Pagamento PIX
-
-```json
-{
-  "referenceId": "PIX-123",
-  "customer": {
-    "name": "Maria Santos",
-    "email": "maria@email.com",
-    "taxId": "98765432100"
-  },
-  "items": [
-    {
-      "name": "Serviço Digital",
-      "quantity": 1,
-      "unitAmount": 5000
-    }
-  ],
-  "pixExpirationDate": "2025-12-31T23:59:59Z"
-}
-```
-
-### 3. Webhook de Pagamento
-
-O webhook recebe notificações automáticas quando:
-- Pagamento é aprovado
-- Pagamento é negado
-- Status muda para aguardando
-- Pagamento é cancelado
+## Outras informações úteis
 
 ## Formato dos Dados
 
@@ -110,22 +58,17 @@ Todos os valores são em **centavos**:
 - CPF: 11 dígitos (apenas números)
 - CNPJ: 14 dígitos (apenas números)
 
-### Telefone
-```json
-{
-  "country": "55",
-  "area": "11",
-  "number": "999999999",
-  "type": "MOBILE"
-}
-```
+Obrigatório para a maioria das operações, exceto criação de link de pagamento.
+
 
 ## Ambientes
 
 ### Sandbox (Teste)
+- O ambiente será de testes sempre que sua Connect Key começar com *CONSANDBOX*. Obtenha a sua [aqui](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
 - Aprovação automática para valores < R$ 100
 - Delay de 5 minutos para valores entre R$ 100-200
 - Ideal para desenvolvimento e testes
+- Veja [Cartões de teste](https://ajuda.pbintegracoes.com/hc/pt-br/articles/22375426666253-Cartões-de-Crédito-para-Testes-PagBank)
 
 ### Produção
 - Processamento real de pagamentos
@@ -136,17 +79,10 @@ Todos os valores são em **centavos**:
 
 ### Configuração
 1. Configure a URL do webhook no n8n
-2. Adicione a URL nas notificações do PagBank
+2. Adicione a URL gerada no campo *URL de Notificação* ao criar pagamentos e links de pagamento nas demais ações
 3. Configure filtros por status e método de pagamento
+4. Certifique-se que a URL pode ser acessada de fora sem nenhum bloqueio.
 
-### Eventos Suportados
-- `PAID` - Pagamento aprovado
-- `DECLINED` - Pagamento negado
-- `WAITING` - Aguardando pagamento
-- `CANCELED` - Pagamento cancelado
-- `REFUNDED` - Pagamento estornado
-
-## Tratamento de Erros
 
 ### Erros Comuns
 - **40002 - Email do comprador igual ao vendedor
@@ -157,13 +93,12 @@ Todos os valores são em **centavos**:
 ### Validações
 - CPF/CNPJ são validados automaticamente
 - Telefones são formatados
-- Valores são convertidos para centavos
 
 ## Suporte
 
-- **Documentação**: [PagBank Developer](https://developer.pagbank.com.br)
-- **Issues**: [GitHub Issues](https://github.com/martins/pagbank-n8n/issues)
-- **Email**: ricardo@ricardomartins.net.br
+- **Site Oficial**: [pbintegracoes.com/n8n](https://pbintegracoes.com/n8n/?utm_source=n8n&utm_medium=github-readme)
+- **Documentação**: [PagBank Integrações](https://ajuda.pbintegracoes.com/hc/pt-br/categories/40055834503053-n8n)
+- **Issues e Suporte**: [Abra um Chamado](https://ajuda.pbintegracoes.com/hc/pt-br/requests/new)
 
 ## Licença
 
@@ -171,11 +106,11 @@ MIT License - veja o arquivo LICENSE para detalhes.
 
 ## Contribuição
 
-1. Fork o projeto
-2. Crie uma branch para sua feature
+1. Fork o [projeto no github](https://github.com/r-martins/PagBank-n8n)
+2. Crie uma branch para sua feature/bugfix
 3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
+4. Push para a sua branch local
+5. Abra um Pull Request para a branch `develop`
 
 ## Changelog
 
@@ -184,4 +119,9 @@ MIT License - veja o arquivo LICENSE para detalhes.
 - Suporte a PIX, Cartão, Boleto
 - Links de pagamento
 - Webhooks
-- Assinaturas recorrentes
+
+## Roadmap
+- Mais opções de parcelamento
+- Venda recorrente
+
+Sujeito à alteração conforme solicitações da comunidade.
