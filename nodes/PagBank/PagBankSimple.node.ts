@@ -39,32 +39,32 @@ export class PagBankSimple implements INodeType {
 				{
 					name: 'Create Payment Link',
 					value: 'createPaymentLink',
-					description: 'Creates a payment link (checkout)',
+					description: 'Create a payment link',
 					action: 'Create payment link',
 				},
 				{
 					name: 'Create PIX Order',
 					value: 'createPixOrder',
-					description: 'Creates an order with PIX payment',
+					description: 'Create an order with PIX payment',
 					action: 'Create PIX order',
 				},
 				{
-					name: 'Check Order Status',
+					name: 'Get Order Status',
 					value: 'getOrderStatus',
-					description: 'Checks the status of an order',
-					action: 'Check order status',
+					description: 'Retrieve the status of an order',
+					action: 'Get order status',
 				},
 				{
 					name: 'Create Credit Card Charge',
 					value: 'createCreditCardCharge',
-					description: 'Creates a direct credit card charge',
+					description: 'Create a direct credit card charge',
 					action: 'Create credit card charge',
 				},
 				{
-					name: 'Validate Connect Key',
+					name: 'Get Connect Key',
 					value: 'validateConnectKey',
-					description: 'Validates if the Connect Key is valid and active',
-					action: 'Validate Connect Key',
+					description: 'Retrieve Connect Key information',
+					action: 'Get Connect Key',
 				},
 				],
 				default: 'createPaymentLink',
@@ -74,6 +74,7 @@ export class PagBankSimple implements INodeType {
 				name: 'referenceId',
 				type: 'string',
 				default: '',
+				placeholder: 'e.g. order123',
 				description: 'Unique ID to identify the order in your system',
 				displayOptions: {
 					show: {
@@ -87,6 +88,7 @@ export class PagBankSimple implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
+				placeholder: 'e.g. John Smith',
 				description: 'Full customer name',
 				displayOptions: {
 					show: {
@@ -100,6 +102,7 @@ export class PagBankSimple implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
+				placeholder: 'e.g. john@example.com',
 				description: 'Customer email',
 				displayOptions: {
 					show: {
@@ -113,6 +116,7 @@ export class PagBankSimple implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
+				placeholder: 'e.g. 12345678901',
 				description: 'Customer CPF (11 digits) or CNPJ (14 digits)',
 				displayOptions: {
 					show: {
@@ -146,6 +150,7 @@ export class PagBankSimple implements INodeType {
 								type: 'string',
 								default: '',
 								required: true,
+								placeholder: 'e.g. Premium Plan',
 								description: 'Product/service name',
 							},
 							{
@@ -153,6 +158,7 @@ export class PagBankSimple implements INodeType {
 								name: 'reference_id',
 								type: 'string',
 								default: '',
+								placeholder: 'e.g. item001',
 								description: 'Item reference ID (optional)',
 							},
 							{
@@ -205,6 +211,7 @@ export class PagBankSimple implements INodeType {
 				name: 'redirectUrl',
 				type: 'string',
 				default: '',
+				placeholder: 'e.g. https://example.com/success',
 				description: 'URL where the customer will be redirected after payment',
 				displayOptions: {
 					show: {
@@ -217,6 +224,7 @@ export class PagBankSimple implements INodeType {
 				name: 'notificationUrl',
 				type: 'string',
 				default: '',
+				placeholder: 'e.g. https://example.com/webhook',
 				description: 'URL to receive payment notifications (maximum 100 characters)',
 				displayOptions: {
 					show: {
@@ -240,45 +248,50 @@ export class PagBankSimple implements INodeType {
 						name: 'card',
 							displayName: 'Card',
 						values: [
-								{
-									displayName: 'Card Number',
-									name: 'number',
-									type: 'string',
-									default: '',
-									required: true,
-									description: 'Credit card number',
+							{
+								displayName: 'Card Number',
+								name: 'number',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. 4111111111111111',
+								description: 'Credit card number',
 								},
-								{
-									displayName: 'Cardholder Name',
-									name: 'holder',
-									type: 'string',
-									default: '',
-									required: true,
-									description: 'Name as it appears on the card',
+							{
+								displayName: 'Cardholder Name',
+								name: 'holder',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. John Smith',
+								description: 'Name as it appears on the card',
 								},
-								{
-									displayName: 'Expiration Month',
-									name: 'expMonth',
-									type: 'string',
-									default: '',
-									required: true,
-									description: 'Expiration month (MM)',
+							{
+								displayName: 'Expiration Month',
+								name: 'expMonth',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. 12',
+								description: 'Expiration month (MM)',
 								},
-								{
-									displayName: 'Expiration Year',
-									name: 'expYear',
-									type: 'string',
-									default: '',
-									required: true,
-									description: 'Expiration year (YYYY)',
+							{
+								displayName: 'Expiration Year',
+								name: 'expYear',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. 2025',
+								description: 'Expiration year (YYYY)',
 								},
-								{
-									displayName: 'Security Code',
-									name: 'securityCode',
-									type: 'string',
-									default: '',
-									required: true,
-									description: 'Card CVV/CVC',
+							{
+								displayName: 'Security Code',
+								name: 'securityCode',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. 123',
+								description: 'Card CVV/CVC',
 								},
 						],
 					},
@@ -301,6 +314,7 @@ export class PagBankSimple implements INodeType {
 				name: 'softDescriptor',
 				type: 'string',
 				default: '',
+				placeholder: 'e.g. MyCompany',
 				description: 'Name that will appear on customer statement (maximum 13 characters)',
 				displayOptions: {
 					show: {
@@ -314,10 +328,23 @@ export class PagBankSimple implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
+				placeholder: 'e.g. ORD123456789',
 				description: 'Order ID to query',
 				displayOptions: {
 					show: {
 						operation: ['getOrderStatus'],
+					},
+				},
+			},
+			{
+				displayName: 'Simplify',
+				name: 'simplify',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to return a simplified version of the response instead of the raw data',
+				displayOptions: {
+					show: {
+						operation: ['getOrderStatus', 'validateConnectKey'],
 					},
 				},
 			},
@@ -664,7 +691,10 @@ export class PagBankSimple implements INodeType {
 		if (missingFields.length > 0) {
 			throw new NodeOperationError(
 				this.getNode(), 
-				`Missing required card data fields: ${missingFields.join(', ')}. Please provide all card information.`
+				`Missing required card data fields: ${missingFields.join(', ')}`,
+				{
+					description: 'Please fill in all required card information fields to complete the payment.',
+				}
 			);
 		}
 		
@@ -673,7 +703,10 @@ export class PagBankSimple implements INodeType {
 		if (!/^\d{13,19}$/.test(cardNumber)) {
 			throw new NodeOperationError(
 				this.getNode(), 
-				'Invalid card number format. Card number must contain 13-19 digits.'
+				'Invalid card number format',
+				{
+					description: 'Card number must contain 13-19 digits. Please check the card number and try again.',
+				}
 			);
 		}
 		
@@ -682,7 +715,10 @@ export class PagBankSimple implements INodeType {
 		if (expMonth < 1 || expMonth > 12) {
 			throw new NodeOperationError(
 				this.getNode(), 
-				'Invalid expiration month. Month must be between 1 and 12.'
+				'Invalid expiration month',
+				{
+					description: 'Month must be between 1 and 12. Please check the expiration month and try again.',
+				}
 			);
 		}
 		
@@ -692,7 +728,10 @@ export class PagBankSimple implements INodeType {
 		if (expYear < currentYear || expYear > currentYear + 20) {
 			throw new NodeOperationError(
 				this.getNode(), 
-				'Invalid expiration year. Year must be between current year and 20 years in the future.'
+				'Invalid expiration year',
+				{
+					description: `Year must be between ${currentYear} and ${currentYear + 20}. Please check the expiration year and try again.`,
+				}
 			);
 		}
 		
@@ -701,7 +740,10 @@ export class PagBankSimple implements INodeType {
 		if (!/^\d{3,4}$/.test(securityCode)) {
 			throw new NodeOperationError(
 				this.getNode(), 
-				'Invalid security code. Security code must contain 3 or 4 digits.'
+				'Invalid security code',
+				{
+					description: 'Security code must contain 3 or 4 digits. Please check the CVV/CVC and try again.',
+				}
 			);
 		}
 		
@@ -710,7 +752,10 @@ export class PagBankSimple implements INodeType {
 		if (holder.length < 2) {
 			throw new NodeOperationError(
 				this.getNode(), 
-				'Invalid card holder name. Name must contain at least 2 characters.'
+				'Invalid card holder name',
+				{
+					description: 'Name must contain at least 2 characters. Please check the cardholder name and try again.',
+				}
 			);
 		}
 		

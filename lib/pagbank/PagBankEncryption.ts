@@ -100,8 +100,10 @@ export function encryptCard(cardData: {
         // Check if the result is valid
         if (!encryptedResult || !encryptedResult.encryptedCard) {
             if (encryptedResult && encryptedResult.errors && encryptedResult.errors.length > 0) {
-                const errorMessages = encryptedResult.errors.map((err: any) => `${err.code}: ${err.message}`).join(', ');
-                throw new Error(`PagBank encryption failed: ${errorMessages}`);
+                const firstError = encryptedResult.errors[0];
+                const errorMessage = firstError.message || firstError.description || 'Encryption failed';
+                const errorCode = firstError.code ? ` (Code: ${firstError.code})` : '';
+                throw new Error(`PagBank encryption failed: ${errorMessage}${errorCode}`);
             }
             throw new Error('PagSeguro.encryptCard returned invalid result');
         }

@@ -5,6 +5,56 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
+// Helper function to extract PagBank error messages
+function extractPagBankErrorMessage(error: any): { message: string; description: string } {
+	let errorMessage = 'Request failed';
+	let errorDescription = 'Please check your input data and try again.';
+	
+	if (error.response) {
+		const responseBody = error.response.body || error.response.data || error.response;
+		
+		// Check for PagBank specific error format
+		if (responseBody?.error_messages && Array.isArray(responseBody.error_messages)) {
+			const firstError = responseBody.error_messages[0];
+			errorMessage = firstError.description || firstError.message || 'API request failed';
+			
+			// Create helpful description based on error code
+			const errorCode = firstError.code || 'Unknown';
+			const parameterName = firstError.parameter_name;
+			
+			switch (errorCode) {
+				case '40002':
+					if (parameterName === 'customer.tax_id') {
+						errorDescription = 'Please provide a valid CPF (11 digits) or CNPJ (14 digits) for the customer.';
+					} else if (parameterName === 'customer.email') {
+						errorDescription = 'Please provide a valid email address for the customer.';
+					} else {
+						errorDescription = 'Please check the input data and ensure all required fields are correctly formatted.';
+					}
+					break;
+				case '40001':
+					errorDescription = 'Please check your Connect Key and ensure it is valid and active.';
+					break;
+				case '40003':
+					errorDescription = 'Please check the payment amount and ensure it is valid.';
+					break;
+				default:
+					errorDescription = `Error code: ${errorCode}. Please check the PagBank documentation for more details.`;
+			}
+			
+			if (parameterName) {
+				errorDescription += ` (Parameter: ${parameterName})`;
+			}
+		} else if (responseBody?.message) {
+			errorMessage = responseBody.message;
+		} else if (responseBody?.error) {
+			errorMessage = responseBody.error;
+		}
+	}
+	
+	return { message: errorMessage, description: errorDescription };
+}
+
 export interface PagBankConnectRequestOptions {
 	method: string;
 	url: string;
@@ -60,13 +110,12 @@ export async function pagBankConnectRequest(
 		const response = await this.helpers.httpRequest(options);
 		return response;
 	} catch (error: any) {
-		if (error.response) {
-			const errorMessage = error.response.body?.error_messages?.[0]?.description || 
-								error.response.body?.message || 
-								error.message;
-			throw new NodeOperationError(this.getNode(), `PagBank Connect API error: ${errorMessage}`);
-		}
-		throw new NodeOperationError(this.getNode(), `Request error: ${error.message}`);
+		// Extract PagBank specific error message
+		const { message: errorMessage, description: errorDescription } = extractPagBankErrorMessage(error);
+			
+		throw new NodeOperationError(this.getNode(), errorMessage, {
+			description: errorDescription,
+		});
 	}
 }
 
