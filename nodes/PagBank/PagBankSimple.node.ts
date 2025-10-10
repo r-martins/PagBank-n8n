@@ -12,7 +12,7 @@ export class PagBankSimple implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'PagBank',
 		name: 'pagBank',
-		icon: 'file:pagbank.svg',
+		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',

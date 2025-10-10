@@ -11,7 +11,7 @@ export class PagBankWebhook implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'PagBank Connect Webhook',
 		name: 'pagBankWebhook',
-		icon: 'file:pagbank.svg',
+		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['trigger'],
 		version: 1,
 		description: 'Webhook para receber notificações do PagBank Connect',
