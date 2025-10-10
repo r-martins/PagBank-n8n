@@ -25,7 +25,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "tsc && gulp build:icons",
+    "build": "tsc && gulp build:all",
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
     "lint": "eslint \"nodes/**/*.ts\" \"credentials/**/*.ts\" package.json",

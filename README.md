@@ -1,127 +1,123 @@
 # n8n-nodes-pagbank-connect
 
-Integração do n8n com PagBank Connect para processamento de pagamentos brasileiros.
+n8n integration with PagBank Connect for Brazilian payment processing.
 
-## Características
+## Features
 
-- ✅ **PIX** - Pagamentos instantâneos com QR Code
-- ✅ **Cartão de Crédito/Débito** - Processamento seguro de cartões
-- ✅ **Boleto** - Boletos bancários para pagamento
-- ✅ **Links de Pagamento** - Checkout personalizado
-- ✅ **Assinaturas Recorrentes** - Pagamentos recorrentes (em breve)
-- ✅ **Webhooks** - Notificações em tempo real
-- ✅ **Ambiente Sandbox** - Testes seguros
-- ✅ **Parceiro Oficial** - [PagBank Integrações](https://pbintegracoes.com/?utm_source=n8n) é parceiro Oficial PagBank desde 2014.
-- ✅ **Taxas reduzidas** - Você paga menos taxas no PagBank ao usar nossas integrações
+- ✅ **PIX** - Instant payments with QR Code
+- ✅ **Credit/Debit Card** - Secure card processing
+- ✅ **Boleto** - Bank slips for payment
+- ✅ **Payment Links** - Custom checkout
+- ✅ **Recurring Subscriptions** - Recurring payments (coming soon)
+- ✅ **Webhooks** - Real-time notifications
+- ✅ **Sandbox Environment** - Safe testing
+- ✅ **Official Partner** - [PagBank Integrations](https://pbintegracoes.com/?utm_source=n8n) is an Official PagBank Partner since 2014.
+- ✅ **Reduced fees** - You pay less fees on PagBank when using our integrations
 
-## Instalação
+## Installation
 
 ```bash
 npm install n8n-nodes-pagbank-connect
 ```
 
-## Configuração
+## Configuration
 
-### 1. Obter Credenciais
+### 1. Get Credentials
 
-Acesse [PagBank Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n) para obter sua Connect Key Gratuitamente
+Visit [PagBank Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n) to get your Connect Key for free
 
-Se precisar de uma Connect Key de Testes, [clique aqui](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
+If you need a Test Connect Key, [click here](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
 
-### 2. Configurar no n8n
+### 2. Configure in n8n
 
-1. Adicione sua Connect key nas credenciais do PagBank Connect
-2. Clique em Salvar e veja se a conexão foi realizada com sucesso.
+1. Add your Connect key in PagBank Connect credentials
+2. Click Save and check if the connection was successful.
 
-## Nós Disponíveis
+## Available Nodes
 
-### PagBank (Principal)
-- **Criar Link de Pagamento** - Gera links de checkout para o cliente pagar no PagBank
-- **Criar Pedido PIX** - Cria pagamentos PIX
-- **Criar Cobrança Cartão** - Processa um pagamento com o cartão de crédito e dados informados
-- **Consultar status do pedido** - Consulta o status de um ORDER junto ao PagBank (deve ter sido gerado com esta connect key)
-- **Validar Connect Key** - Valida Connect Key configurada em suas credenciais
+### PagBank (Main)
+- **Create Payment Link** - Generates checkout links for customers to pay on PagBank
+- **Create PIX Order** - Creates PIX payments
+- **Create Credit Card Charge** - Processes a payment with the provided credit card data
+- **Check order status** - Queries the status of an ORDER with PagBank (must have been generated with this connect key)
+- **Validate Connect Key** - Validates the Connect Key configured in your credentials
 
 ### PagBank Webhook
-- **Webhook de Pagamento** - Recebe notificações. É possível filtrar por notificações por status de pagamento, meios de pagamento ou motivo de negação.
+- **Payment Webhook** - Receives notifications. You can filter notifications by payment status, payment methods or denial reason.
 
-## Outras informações úteis
+## Data Format
 
-## Formato dos Dados
-
-### Valores Monetários
-Todos os valores são em **centavos**:
-- R$ 10,00 = 1000
-- R$ 1,50 = 150
+### Monetary Values
+All values are in **cents**:
+- R$ 10.00 = 1000
+- R$ 1.50 = 150
 
 ### CPF/CNPJ
-- CPF: 11 dígitos (apenas números)
-- CNPJ: 14 dígitos (apenas números)
+- CPF: 11 digits (numbers only)
+- CNPJ: 14 digits (numbers only)
 
-Obrigatório para a maioria das operações, exceto criação de link de pagamento.
+Required for most operations, except payment link creation.
 
+## Environments
 
-## Ambientes
+### Sandbox (Test)
+- The environment will be for testing whenever your Connect Key starts with *CONSANDBOX*. Get yours [here](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
+- Automatic approval for values < R$ 100
+- 5 minute delay for values between R$ 100-200
+- Ideal for development and testing
+- See [Test Cards](https://ajuda.pbintegracoes.com/hc/pt-br/articles/22375426666253-Cartões-de-Crédito-para-Testes-PagBank)
 
-### Sandbox (Teste)
-- O ambiente será de testes sempre que sua Connect Key começar com *CONSANDBOX*. Obtenha a sua [aqui](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
-- Aprovação automática para valores < R$ 100
-- Delay de 5 minutos para valores entre R$ 100-200
-- Ideal para desenvolvimento e testes
-- Veja [Cartões de teste](https://ajuda.pbintegracoes.com/hc/pt-br/articles/22375426666253-Cartões-de-Crédito-para-Testes-PagBank)
-
-### Produção
-- Processamento real de pagamentos
-- Requer aprovação do PagBank
-- Use apenas após testes completos
+### Production
+- Real payment processing
+- Requires PagBank approval
+- Use only after complete testing
 
 ## Webhooks
 
-### Configuração
-1. Configure a URL do webhook no n8n
-2. Adicione a URL gerada no campo *URL de Notificação* ao criar pagamentos e links de pagamento nas demais ações
-3. Configure filtros por status e método de pagamento
-4. Certifique-se que a URL pode ser acessada de fora sem nenhum bloqueio.
+### Configuration
+1. Configure the webhook URL in n8n
+2. Add the generated URL in the *Notification URL* field when creating payments and payment links in other actions
+3. Configure filters by status and payment method
+4. Make sure the URL can be accessed from outside without any blocking.
 
+### Common Errors
+- **40002 - Buyer email same as seller
+- **40002 - Invalid CPF/CNPJ
+- **40002 - Invalid phone
+- **UNAUTHORIZED - Invalid Connect Key
 
-### Erros Comuns
-- **40002 - Email do comprador igual ao vendedor
-- **40002 - CPF/CNPJ inválido
-- **40002 - Telefone inválido
-- **UNAUTHORIZED - Connect Key inválida
+### Validations
+- CPF/CNPJ are automatically validated
+- Phones are formatted
 
-### Validações
-- CPF/CNPJ são validados automaticamente
-- Telefones são formatados
+## Support
 
-## Suporte
+- **Official Site**: [pbintegracoes.com/n8n](https://pbintegracoes.com/n8n/?utm_source=n8n&utm_medium=github-readme)
+- **Documentation**: [PagBank Integrations](https://ajuda.pbintegracoes.com/hc/pt-br/categories/40055834503053-n8n)
+- **Issues and Support**: [Open a Ticket](https://ajuda.pbintegracoes.com/hc/pt-br/requests/new)
 
-- **Site Oficial**: [pbintegracoes.com/n8n](https://pbintegracoes.com/n8n/?utm_source=n8n&utm_medium=github-readme)
-- **Documentação**: [PagBank Integrações](https://ajuda.pbintegracoes.com/hc/pt-br/categories/40055834503053-n8n)
-- **Issues e Suporte**: [Abra um Chamado](https://ajuda.pbintegracoes.com/hc/pt-br/requests/new)
+## License
 
-## Licença
+MIT License - see LICENSE file for details.
 
-MIT License - veja o arquivo LICENSE para detalhes.
+## Contributing
 
-## Contribuição
-
-1. Fork o [projeto no github](https://github.com/r-martins/PagBank-n8n)
-2. Crie uma branch para sua feature/bugfix
-3. Commit suas mudanças
-4. Push para a sua branch local
-5. Abra um Pull Request para a branch `develop`
+1. Fork the [project on github](https://github.com/r-martins/PagBank-n8n)
+2. Create a branch for your feature/bugfix
+3. Commit your changes
+4. Push to your local branch
+5. Open a Pull Request to the `develop` branch
 
 ## Changelog
 
 ### v1.0.0
-- Lançamento inicial
-- Suporte a PIX, Cartão, Boleto
-- Links de pagamento
+- Initial release
+- Support for PIX, Card, Boleto
+- Payment links
 - Webhooks
 
 ## Roadmap
-- Mais opções de parcelamento
-- Venda recorrente
+- More installment options
+- Recurring sales
 
-Sujeito à alteração conforme solicitações da comunidade.
+Subject to change based on community requests.

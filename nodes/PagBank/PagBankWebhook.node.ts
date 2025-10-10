@@ -14,7 +14,7 @@ export class PagBankWebhook implements INodeType {
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['trigger'],
 		version: 1,
-		description: 'Webhook para receber notificações do PagBank Connect',
+		description: 'Webhook to receive PagBank Connect notifications',
 		documentationUrl: 'https://ajuda.pbintegracoes.com/hc/pt-br/articles/40055875188621-Como-testar-as-Triggers-Webhooks-do-PagBank-no-n8n',
 		defaults: {
 			name: 'PagBank Connect Webhook',
@@ -31,28 +31,28 @@ export class PagBankWebhook implements INodeType {
 		],
 		properties: [
 			{
-				displayName: 'Filtrar por Status de Pagamento',
+				displayName: 'Filter by Payment Status',
 				name: 'filterByStatus',
 				type: 'multiOptions',
 				options: [
 					{
-						name: 'Pagamento Aprovado (PAID)',
+						name: 'Payment Approved (PAID)',
 						value: 'PAID',
 					},
 					{
-						name: 'Aguardando Pagamento (WAITING)',
+						name: 'Waiting for Payment (WAITING)',
 						value: 'WAITING',
 					},
 					{
-						name: 'Pagamento Negado (DECLINED)',
+						name: 'Payment Declined (DECLINED)',
 						value: 'DECLINED',
 					},
 				],
 				default: [],
-				description: 'Selecione os status de pagamento que deseja receber. Deixe vazio para receber todos.',
+				description: 'Select payment statuses you want to receive. Leave empty to receive all.',
 			},
 			{
-				displayName: 'Filtrar por Método de Pagamento',
+				displayName: 'Filter by Payment Method',
 				name: 'filterByPaymentMethod',
 				type: 'multiOptions',
 				options: [
@@ -61,40 +61,40 @@ export class PagBankWebhook implements INodeType {
 						value: 'PIX',
 					},
 					{
-						name: 'Cartão de Crédito',
+						name: 'Credit Card',
 						value: 'CREDIT_CARD',
 					},
 					{
-						name: 'Boleto',
+						name: 'Bank Slip',
 						value: 'BOLETO',
 					},
 				],
 				default: [],
-				description: 'Selecione os métodos de pagamento que deseja receber. Deixe vazio para receber todos.',
+				description: 'Select payment methods you want to receive. Leave empty to receive all.',
 			},
 			{
-				displayName: 'Filtrar por Motivo de Negação',
+				displayName: 'Filter by Decline Reason',
 				name: 'filterByDeclineReason',
 				type: 'multiOptions',
 				options: [
 					{
-						name: 'Negado pelo Banco',
+						name: 'Declined by Bank',
 						value: 'DECLINED_BY_BANK',
 					},
 					{
-						name: 'Negado pelo PagBank',
+						name: 'Declined by PagBank',
 						value: 'DECLINED_BY_PAGBANK',
 					},
 				],
 				default: [],
-				description: 'Selecione os motivos de negação que deseja receber. Deixe vazio para receber todos.',
+				description: 'Select decline reasons you want to receive. Leave empty to receive all.',
 			},
 			{
-				displayName: 'Adicionar Campos Calculados',
+				displayName: 'Add Calculated Fields',
 				name: 'addCalculatedFields',
 				type: 'boolean',
 				default: true,
-				description: 'Adiciona campos calculados como evento, método de pagamento formatado, etc.',
+				description: 'Adds calculated fields like event, formatted payment method, etc.',
 			},
 		],
 	};
@@ -114,28 +114,25 @@ export class PagBankWebhook implements INodeType {
 	};
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
-		console.log('=== PAGBANK WEBHOOK EXECUTADO ===');
-		console.log('Timestamp:', new Date().toISOString());
 
-		// Obtém os dados do webhook
+		// Get webhook data
 		const bodyData = this.getBodyData();
 		const headerData = this.getHeaderData();
 
-		console.log('Dados recebidos:', JSON.stringify(bodyData, null, 2));
 
-		// Obtém configurações do nó
+		// Get node settings
 		const filterByStatus = this.getNodeParameter('filterByStatus', 0) as string[];
 		const filterByPaymentMethod = this.getNodeParameter('filterByPaymentMethod', 0) as string[];
 		const filterByDeclineReason = this.getNodeParameter('filterByDeclineReason', 0) as string[];
 		const addCalculatedFields = this.getNodeParameter('addCalculatedFields', 0) as boolean;
 
-		// Processa os dados do PagBank
+		// Process PagBank data
 		const orderId = bodyData.id || 'N/A';
 		const referenceId = bodyData.reference_id || 'N/A';
 		const customer = bodyData.customer || {};
 		const charges = Array.isArray(bodyData.charges) ? bodyData.charges : [];
 		
-		// Pega o primeiro charge (pagamento)
+		// Get first charge (payment)
 		const firstCharge = charges[0] || {};
 		const status = firstCharge.status || 'UNKNOWN';
 		const amount = firstCharge.amount || {};
@@ -143,37 +140,33 @@ export class PagBankWebhook implements INodeType {
 		const paidAt = firstCharge.paid_at || null;
 		const paymentResponse = firstCharge.payment_response || {};
 
-		// Aplica filtros
+		// Apply filters
 		let shouldProcess = true;
 
-		// Filtro por status
+		// Filter by status
 		if (filterByStatus.length > 0 && !filterByStatus.includes(status)) {
 			shouldProcess = false;
-			console.log(`Filtro de status: ${status} não está em ${filterByStatus.join(', ')}`);
 		}
 
-		// Filtro por método de pagamento
+		// Filter by payment method
 		if (shouldProcess && filterByPaymentMethod.length > 0) {
 			const paymentMethodType = paymentMethod.type || 'UNKNOWN';
 			if (!filterByPaymentMethod.includes(paymentMethodType)) {
 				shouldProcess = false;
-				console.log(`Filtro de método: ${paymentMethodType} não está em ${filterByPaymentMethod.join(', ')}`);
 			}
 		}
 
-		// Filtro por motivo de negação
+		// Filter by decline reason
 		if (shouldProcess && filterByDeclineReason.length > 0 && status === 'DECLINED') {
 			const webhookInstance = new PagBankWebhook();
 			const declineReason = webhookInstance.getDeclineReason.call(webhookInstance, paymentResponse);
 			if (!filterByDeclineReason.includes(declineReason)) {
 				shouldProcess = false;
-				console.log(`Filtro de negação: ${declineReason} não está em ${filterByDeclineReason.join(', ')}`);
 			}
 		}
 
-		// Se não deve processar, retorna sem dados
+		// If should not process, return without data
 		if (!shouldProcess) {
-			console.log('Webhook filtrado - não processando');
 			return {
 				webhookResponse: {
 					status: 200,
@@ -183,22 +176,22 @@ export class PagBankWebhook implements INodeType {
 			};
 		}
 
-		// Monta os dados processados
+		// Build processed data
 		const processedData: any = {
-			// Dados essenciais do pedido
+			// Essential order data
 			orderId: orderId,
 			referenceId: referenceId,
 			status: status,
 			
-			// Valor e moeda
+			// Value and currency
 			amount: amount.value || 0,
 			currency: amount.currency || 'BRL',
 			
-			// Cliente
+			// Customer
 			customerName: (customer as any)?.name || 'N/A',
 			customerEmail: (customer as any)?.email || 'N/A',
 			
-			// Método de pagamento
+			// Payment method
 			paymentMethod: paymentMethod.type || 'UNKNOWN',
 			paidAt: paidAt,
 			
@@ -206,7 +199,7 @@ export class PagBankWebhook implements INodeType {
 			receivedAt: new Date().toISOString(),
 		};
 
-		// Adiciona campos calculados se habilitado
+		// Add calculated fields if enabled
 		if (addCalculatedFields) {
 			const webhookInstance = new PagBankWebhook();
 			processedData.event = webhookInstance.getEventType.call(webhookInstance, status, paymentMethod.type);
@@ -218,10 +211,9 @@ export class PagBankWebhook implements INodeType {
 			processedData.isDeclined = status === 'DECLINED';
 		}
 
-		// Adiciona dados brutos para debug
+		// Add raw data for debug
 		processedData.rawData = bodyData;
 
-		console.log('Dados processados:', JSON.stringify(processedData, null, 2));
 
 		return {
 			webhookResponse: {
@@ -240,29 +232,29 @@ export class PagBankWebhook implements INodeType {
 
 	private getEventType(status: string, paymentMethod: string): string {
 		if (status === 'PAID') {
-			return `PAGAMENTO_APROVADO_${paymentMethod}`;
+			return `PAYMENT_APPROVED_${paymentMethod}`;
 		} else if (status === 'WAITING') {
-			return `AGUARDANDO_PAGAMENTO_${paymentMethod}`;
+			return `WAITING_PAYMENT_${paymentMethod}`;
 		} else if (status === 'DECLINED') {
-			return `PAGAMENTO_NEGADO_${paymentMethod}`;
+			return `PAYMENT_DECLINED_${paymentMethod}`;
 		}
-		return `EVENTO_DESCONHECIDO_${status}`;
+		return `UNKNOWN_EVENT_${status}`;
 	}
 
 	private getPaymentMethodFormatted(paymentMethod: string): string {
 		const methods: { [key: string]: string } = {
 			'PIX': 'PIX',
-			'CREDIT_CARD': 'Cartão de Crédito',
-			'BOLETO': 'Boleto Bancário',
+			'CREDIT_CARD': 'Credit Card',
+			'BOLETO': 'Bank Slip',
 		};
 		return methods[paymentMethod] || paymentMethod;
 	}
 
 	private getStatusFormatted(status: string): string {
 		const statuses: { [key: string]: string } = {
-			'PAID': 'Pago',
-			'WAITING': 'Aguardando Pagamento',
-			'DECLINED': 'Negado',
+			'PAID': 'Paid',
+			'WAITING': 'Waiting for Payment',
+			'DECLINED': 'Declined',
 		};
 		return statuses[status] || status;
 	}

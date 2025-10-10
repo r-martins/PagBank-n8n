@@ -16,7 +16,7 @@ export class PagBankConnect implements ICredentialType {
 			type: 'string',
 			typeOptions: { password: true },
 			default: '',
-			description: 'Sua Connect Key do PagBank Connect. Obtenha em: https://pbintegracoes.com/connect/autorizar/?utm_source=n8n',
+			description: 'Your PagBank Connect Key. Get it at: https://pbintegracoes.com/connect/autorizar/?utm_source=n8n',
 		},
 	];
 
@@ -34,9 +34,14 @@ export class PagBankConnect implements ICredentialType {
 
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: 'https://ws.pbintegracoes.com/pspro/v7',
-			url: '/connect/connectInfo',
+			url: 'https://ws.pbintegracoes.com/pspro/v7/connect/connectInfo',
 			method: 'GET',
+			headers: {
+				'Authorization': '=Bearer {{$credentials.connectKey}}',
+				'Platform': 'n8n',
+				'Platform-Version': '1.113.3',
+				'Module-Version': '1.0.0',
+			},
 		},
 	};
 }

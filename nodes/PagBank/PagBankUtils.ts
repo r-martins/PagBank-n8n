@@ -23,7 +23,7 @@ export async function pagBankConnectRequest(
 	const credentials = await this.getCredentials('pagBankConnect');
 	
 	if (!credentials) {
-		throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank Connect não encontradas');
+		throw new NodeOperationError(this.getNode(), 'PagBank Connect credentials not found');
 	}
 
 	const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
@@ -57,16 +57,16 @@ export async function pagBankConnectRequest(
 	}
 
 	try {
-		const response = await this.helpers.request(options);
+		const response = await this.helpers.httpRequest(options);
 		return response;
 	} catch (error: any) {
 		if (error.response) {
 			const errorMessage = error.response.body?.error_messages?.[0]?.description || 
 								error.response.body?.message || 
 								error.message;
-			throw new NodeOperationError(this.getNode(), `Erro na API do PagBank Connect: ${errorMessage}`);
+			throw new NodeOperationError(this.getNode(), `PagBank Connect API error: ${errorMessage}`);
 		}
-		throw new NodeOperationError(this.getNode(), `Erro na requisição: ${error.message}`);
+		throw new NodeOperationError(this.getNode(), `Request error: ${error.message}`);
 	}
 }
 
@@ -75,54 +75,35 @@ export async function validateConnectKey(
 	connectKey: string,
 ): Promise<{ isValid: boolean; status: string; message: string; accountInfo?: any }> {
 	try {
-		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
-		const isSandbox = connectKey.startsWith('CONSANDBOX');
-		let url = `${baseURL}/connect/connectInfo`;
-		if (isSandbox) {
-			url += '?isSandbox=1';
-		}
-
-		const options: any = {
-			method: 'GET',
-			url,
-			headers: {
-				'Authorization': `Bearer ${connectKey}`,
-				'Platform': 'n8n',
-				'Platform-Version': '1.113.3',
-				'Module-Version': '1.0.0',
-			},
-			json: true,
-		};
-
-		const response = await this.helpers.request(options);
+		const response = await pagBankConnectRequest.call(this, 'GET', '/connect/connectInfo');
 		
 		// Verificar status da resposta
 		if (response.status === 'VALID') {
 			return {
 				isValid: true,
 				status: 'VALID',
-				message: 'Connect Key válida e ativa',
+				message: 'Connect Key valid and active',
 				accountInfo: response,
 			};
 		} else if (response.status === 'INVALID') {
 			return {
 				isValid: false,
 				status: 'INVALID',
-				message: 'Connect Key inválida - conta pessoal (BUYER) não é permitida',
+				message: 'Invalid Connect Key - personal account (BUYER) not allowed',
 				accountInfo: response,
 			};
 		} else if (response.status === 'UNAUTHORIZED') {
 			return {
 				isValid: false,
 				status: 'UNAUTHORIZED',
-				message: 'Connect Key não autorizada ou expirada',
+				message: 'Connect Key not authorized or expired',
 				accountInfo: response,
 			};
 		} else {
 			return {
 				isValid: false,
 				status: 'UNKNOWN',
-				message: 'Erro desconhecido ao validar Connect Key',
+				message: 'Unknown error validating Connect Key',
 				accountInfo: response,
 			};
 		}
@@ -131,14 +112,14 @@ export async function validateConnectKey(
 			return {
 				isValid: false,
 				status: 'UNAUTHORIZED',
-				message: 'Connect Key inválida ou expirada',
+				message: 'Invalid or expired Connect Key',
 			};
 		}
 		
 		return {
 			isValid: false,
 			status: 'UNKNOWN',
-			message: `Erro ao validar Connect Key: ${error.message}`,
+			message: `Error validating Connect Key: ${error.message}`,
 		};
 	}
 }
@@ -153,7 +134,7 @@ export function validateRequiredFields(fields: Record<string, any>): void {
 	}
 
 	if (missingFields.length > 0) {
-		throw new Error(`Campos obrigatórios não preenchidos: ${missingFields.join(', ')}`);
+		throw new Error(`Required fields not filled: ${missingFields.join(', ')}`);
 	}
 }
 
@@ -176,7 +157,7 @@ export function formatTaxId(taxId: string): string {
 	} else if (cleanTaxId.length === 14) {
 		return cleanTaxId; // CNPJ
 	} else {
-		throw new Error('CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos');
+		throw new Error('CPF must have 11 digits or CNPJ must have 14 digits');
 	}
 }
 
@@ -249,14 +230,14 @@ export function formatBrazilianAddress(address: any): any {
 
 export function getPaymentStatusText(status: string): string {
 	const statusMap: Record<string, string> = {
-		'PAID': 'Pago',
-		'WAITING': 'Aguardando Pagamento',
-		'DECLINED': 'Negado',
-		'CANCELED': 'Cancelado',
-		'REFUNDED': 'Estornado',
-		'PENDING': 'Pendente',
-		'ACTIVE': 'Ativo',
-		'INACTIVE': 'Inativo',
+			'PAID': 'Paid',
+			'WAITING': 'Waiting for Payment',
+			'DECLINED': 'Declined',
+			'CANCELED': 'Canceled',
+			'REFUNDED': 'Refunded',
+			'PENDING': 'Pending',
+			'ACTIVE': 'Active',
+			'INACTIVE': 'Inactive',
 	};
 
 	return statusMap[status] || status;
@@ -264,10 +245,10 @@ export function getPaymentStatusText(status: string): string {
 
 export function getPaymentMethodText(method: string): string {
 	const methodMap: Record<string, string> = {
-		'CREDIT_CARD': 'Cartão de Crédito',
-		'DEBIT_CARD': 'Cartão de Débito',
+			'CREDIT_CARD': 'Credit Card',
+			'DEBIT_CARD': 'Debit Card',
 		'PIX': 'PIX',
-		'BOLETO': 'Boleto',
+			'BOLETO': 'Bank Slip',
 	};
 
 	return methodMap[method] || method;
@@ -284,11 +265,11 @@ export function formatErrorResponse(error: any): string {
 		return error.message;
 	}
 	
-	return 'Erro desconhecido';
+		return 'Unknown error';
 }
 
 export function sanitizeCardData(cardData: any): any {
-	// Remove dados sensíveis do cartão para logs
+		// Remove sensitive card data for logs
 	const sanitized = { ...cardData };
 	delete sanitized.number;
 	delete sanitized.securityCode;
@@ -297,7 +278,7 @@ export function sanitizeCardData(cardData: any): any {
 }
 
 export function formatWebhookData(webhookData: any): any {
-	// Formata dados do webhook para facilitar o uso
+		// Format webhook data to facilitate usage
 	return {
 		orderId: webhookData.id,
 		referenceId: webhookData.reference_id,

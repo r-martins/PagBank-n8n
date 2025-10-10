@@ -6,7 +6,8 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { validateConnectKey } from './PagBankUtils';
+import { validateConnectKey, pagBankConnectRequest } from './PagBankUtils';
+import { encryptCard } from '../../lib/pagbank/PagBankEncryption';
 
 export class PagBankSimple implements INodeType {
 	description: INodeTypeDescription = {
@@ -16,7 +17,7 @@ export class PagBankSimple implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
-		description: 'Integração com PagBank para processamento de pagamentos',
+		description: 'Integration with PagBank for payment processing',
 		defaults: {
 			name: 'PagBank',
 		},
@@ -30,50 +31,50 @@ export class PagBankSimple implements INodeType {
 		],
 		properties: [
 			{
-				displayName: 'Operação',
+				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{
-						name: 'Criar Link de Pagamento',
-						value: 'createPaymentLink',
-						description: 'Cria um link de pagamento (checkout)',
-						action: 'Criar link de pagamento',
-					},
-					{
-						name: 'Criar Pedido PIX',
-						value: 'createPixOrder',
-						description: 'Cria um pedido com pagamento PIX',
-						action: 'Criar pedido PIX',
-					},
-					{
-						name: 'Consultar Status do Pedido',
-						value: 'getOrderStatus',
-						description: 'Consulta o status de um pedido',
-						action: 'Consultar status do pedido',
-					},
-					{
-						name: 'Criar Cobrança Cartão de Crédito',
-						value: 'createCreditCardCharge',
-						description: 'Cria uma cobrança direta em cartão de crédito',
-						action: 'Criar cobrança cartão',
-					},
-					{
-						name: 'Validar Connect Key',
-						value: 'validateConnectKey',
-						description: 'Valida se a Connect Key está válida e ativa',
-						action: 'Validar Connect Key',
-					},
+				{
+					name: 'Create Payment Link',
+					value: 'createPaymentLink',
+					description: 'Creates a payment link (checkout)',
+					action: 'Create payment link',
+				},
+				{
+					name: 'Create PIX Order',
+					value: 'createPixOrder',
+					description: 'Creates an order with PIX payment',
+					action: 'Create PIX order',
+				},
+				{
+					name: 'Check Order Status',
+					value: 'getOrderStatus',
+					description: 'Checks the status of an order',
+					action: 'Check order status',
+				},
+				{
+					name: 'Create Credit Card Charge',
+					value: 'createCreditCardCharge',
+					description: 'Creates a direct credit card charge',
+					action: 'Create credit card charge',
+				},
+				{
+					name: 'Validate Connect Key',
+					value: 'validateConnectKey',
+					description: 'Validates if the Connect Key is valid and active',
+					action: 'Validate Connect Key',
+				},
 				],
 				default: 'createPaymentLink',
 			},
 			{
-				displayName: 'ID de Referência',
+				displayName: 'Reference ID',
 				name: 'referenceId',
 				type: 'string',
 				default: '',
-				description: 'ID único para identificar o pedido no seu sistema',
+				description: 'Unique ID to identify the order in your system',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
@@ -81,12 +82,12 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'Nome do Cliente',
+				displayName: 'Customer Name',
 				name: 'customerName',
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'Nome completo do cliente',
+				description: 'Full customer name',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
@@ -94,12 +95,12 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'Email do Cliente',
+				displayName: 'Customer Email',
 				name: 'customerEmail',
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'Email do cliente',
+				description: 'Customer email',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
@@ -107,12 +108,12 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'CPF/CNPJ do Cliente',
+				displayName: 'Customer CPF/CNPJ',
 				name: 'customerTaxId',
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'CPF (11 dígitos) ou CNPJ (14 dígitos) do cliente',
+				description: 'Customer CPF (11 digits) or CNPJ (14 digits)',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
@@ -120,12 +121,12 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'Itens do Pedido',
+				displayName: 'Order Items',
 				name: 'items',
 				type: 'fixedCollection',
 				default: [],
 				placeholder: 'Add Item',
-				description: 'Lista de itens do pedido',
+				description: 'List of order items',
 				typeOptions: {
 					multipleValues: true,
 				},
@@ -140,47 +141,47 @@ export class PagBankSimple implements INodeType {
 						name: 'itemProperties',
 						values: [
 							{
-								displayName: 'Nome do Produto',
+								displayName: 'Product Name',
 								name: 'name',
 								type: 'string',
 								default: '',
 								required: true,
-								description: 'Nome do produto/serviço',
+								description: 'Product/service name',
 							},
 							{
-								displayName: 'Referência',
+								displayName: 'Reference',
 								name: 'reference_id',
 								type: 'string',
 								default: '',
-								description: 'ID de referência do item (opcional)',
+								description: 'Item reference ID (optional)',
 							},
 							{
-								displayName: 'Quantidade',
+								displayName: 'Quantity',
 								name: 'quantity',
 								type: 'number',
 								default: 1,
 								required: true,
-								description: 'Quantidade do item',
+								description: 'Item quantity',
 							},
 							{
-								displayName: 'Valor (em centavos)',
+								displayName: 'Value (in cents)',
 								name: 'unit_amount',
 								type: 'number',
 								default: 0,
 								required: true,
-								description: 'Valor unitário em centavos (ex: R$ 10,00 = 1000)',
+								description: 'Unit value in cents (e.g.: R$ 10.00 = 1000)',
 							},
 						],
 					},
 				],
 			},
 			{
-				displayName: 'Métodos de Pagamento',
+				displayName: 'Payment Methods',
 				name: 'paymentMethods',
 				type: 'multiOptions',
 				options: [
 					{
-						name: 'Cartão de Crédito',
+						name: 'Credit Card',
 						value: 'CREDIT_CARD',
 					},
 					{
@@ -188,7 +189,7 @@ export class PagBankSimple implements INodeType {
 						value: 'PIX',
 					},
 					{
-						name: 'Boleto',
+						name: 'Bank Slip',
 						value: 'BOLETO',
 					},
 				],
@@ -200,11 +201,11 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'URL de Redirecionamento',
+				displayName: 'Redirect URL',
 				name: 'redirectUrl',
 				type: 'string',
 				default: '',
-				description: 'URL para onde o cliente será redirecionado após o pagamento',
+				description: 'URL where the customer will be redirected after payment',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink'],
@@ -212,11 +213,11 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'URL de Notificação',
+				displayName: 'Notification URL',
 				name: 'notificationUrl',
 				type: 'string',
 				default: '',
-				description: 'URL para receber notificações de pagamento (máximo 100 caracteres)',
+				description: 'URL to receive payment notifications (maximum 100 characters)',
 				displayOptions: {
 					show: {
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
@@ -225,7 +226,7 @@ export class PagBankSimple implements INodeType {
 			},
 			// Campos específicos para cobrança em cartão
 			{
-				displayName: 'Dados do Cartão',
+				displayName: 'Card Data',
 				name: 'cardData',
 				type: 'fixedCollection',
 				default: {},
@@ -237,58 +238,58 @@ export class PagBankSimple implements INodeType {
 				options: [
 					{
 						name: 'card',
-						displayName: 'Cartão',
+							displayName: 'Card',
 						values: [
-							{
-								displayName: 'Número do Cartão',
-								name: 'number',
-								type: 'string',
-								default: '',
-								required: true,
-								description: 'Número do cartão de crédito',
-							},
-							{
-								displayName: 'Nome no Cartão',
-								name: 'holder',
-								type: 'string',
-								default: '',
-								required: true,
-								description: 'Nome como aparece no cartão',
-							},
-							{
-								displayName: 'Mês de Vencimento',
-								name: 'expMonth',
-								type: 'string',
-								default: '',
-								required: true,
-								description: 'Mês de vencimento (MM)',
-							},
-							{
-								displayName: 'Ano de Vencimento',
-								name: 'expYear',
-								type: 'string',
-								default: '',
-								required: true,
-								description: 'Ano de vencimento (YYYY)',
-							},
-							{
-								displayName: 'Código de Segurança',
-								name: 'securityCode',
-								type: 'string',
-								default: '',
-								required: true,
-								description: 'CVV/CVC do cartão',
-							},
+								{
+									displayName: 'Card Number',
+									name: 'number',
+									type: 'string',
+									default: '',
+									required: true,
+									description: 'Credit card number',
+								},
+								{
+									displayName: 'Cardholder Name',
+									name: 'holder',
+									type: 'string',
+									default: '',
+									required: true,
+									description: 'Name as it appears on the card',
+								},
+								{
+									displayName: 'Expiration Month',
+									name: 'expMonth',
+									type: 'string',
+									default: '',
+									required: true,
+									description: 'Expiration month (MM)',
+								},
+								{
+									displayName: 'Expiration Year',
+									name: 'expYear',
+									type: 'string',
+									default: '',
+									required: true,
+									description: 'Expiration year (YYYY)',
+								},
+								{
+									displayName: 'Security Code',
+									name: 'securityCode',
+									type: 'string',
+									default: '',
+									required: true,
+									description: 'Card CVV/CVC',
+								},
 						],
 					},
 				],
 			},
 			{
-				displayName: 'Parcelas',
+				displayName: 'Installments',
 				name: 'installments',
 				type: 'number',
 				default: 1,
-				description: 'Número de parcelas (1 a 12)',
+				description: 'Number of installments (1 to 12)',
 				displayOptions: {
 					show: {
 						operation: ['createCreditCardCharge'],
@@ -296,11 +297,11 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'Nome na Fatura',
+				displayName: 'Statement Descriptor',
 				name: 'softDescriptor',
 				type: 'string',
 				default: '',
-				description: 'Nome que aparecerá na fatura do cliente (máximo 13 caracteres)',
+				description: 'Name that will appear on customer statement (maximum 13 characters)',
 				displayOptions: {
 					show: {
 						operation: ['createCreditCardCharge'],
@@ -308,12 +309,12 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'ID do Pedido',
+				displayName: 'Order ID',
 				name: 'orderId',
 				type: 'string',
 				default: '',
 				required: true,
-				description: 'ID do pedido para consultar',
+				description: 'Order ID to query',
 				displayOptions: {
 					show: {
 						operation: ['getOrderStatus'],
@@ -345,7 +346,7 @@ export class PagBankSimple implements INodeType {
 				} else if (operation === 'validateConnectKey') {
 					responseData = await nodeInstance.validateConnectKey.call(this, i);
 				} else {
-					throw new NodeOperationError(this.getNode(), `Operação não suportada: ${operation}`);
+					throw new NodeOperationError(this.getNode(), `Unsupported operation: ${operation}`);
 				}
 
 				returnData.push({
@@ -373,9 +374,8 @@ export class PagBankSimple implements INodeType {
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
 		const itemsData = this.getNodeParameter('items', itemIndex) as any;
-		console.log('🔍 Debug itemsData:', JSON.stringify(itemsData, null, 2));
 		
-		// O n8n retorna objeto com itemProperties array para fixedCollection com multipleValues
+		// n8n returns object with itemProperties array for fixedCollection with multipleValues
 		let items: any[] = [];
 		if (itemsData && itemsData.itemProperties && Array.isArray(itemsData.itemProperties)) {
 			items = itemsData.itemProperties.map((item: any) => ({
@@ -385,19 +385,12 @@ export class PagBankSimple implements INodeType {
 				unit_amount: item.unit_amount || 0
 			}));
 		} else {
-			console.log('⚠️ itemsData não é válido:', typeof itemsData, itemsData);
 			items = [];
 		}
 		
-		console.log('📦 Items finais (array):', items);
 		const paymentMethods = this.getNodeParameter('paymentMethods', itemIndex) as string[];
 		const redirectUrl = this.getNodeParameter('redirectUrl', itemIndex) as string;
 		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
-
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank não encontradas');
-		}
 
 		const body: any = {
 			reference_id: referenceId || `PEDIDO-${Date.now()}`,
@@ -420,34 +413,14 @@ export class PagBankSimple implements INodeType {
 		}
 
 		if (notificationUrl) {
-			// Validar comprimento da URL (máximo 100 caracteres)
+			// Validate URL length (maximum 100 characters)
 			if (notificationUrl.length > 100) {
-				throw new NodeOperationError(this.getNode(), 'URL de notificação deve ter no máximo 100 caracteres');
+				throw new NodeOperationError(this.getNode(), 'Notification URL must have maximum 100 characters');
 			}
 			body.notification_urls = [notificationUrl.trim()];
 		}
 
-		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
-		const connectKey = (credentials as any).connectKey;
-		const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
-		let url = `${baseURL}/connect/ws/checkouts`;
-		if (isSandbox) {
-			url += '?isSandbox=1';
-		}
-
-		const options: any = {
-			method: 'POST',
-			url,
-			headers: {
-				'Authorization': `Bearer ${(credentials as any).connectKey}`,
-				'Platform': (credentials as any).platform || 'n8n',
-				'Content-Type': 'application/json',
-			},
-			body,
-			json: true,
-		};
-
-		const response = await this.helpers.request(options);
+		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/checkouts', body);
 		return response;
 	}
 	
@@ -457,9 +430,8 @@ export class PagBankSimple implements INodeType {
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
 		const itemsData = this.getNodeParameter('items', itemIndex) as any;
-		console.log('🔍 Debug itemsData:', JSON.stringify(itemsData, null, 2));
 		
-		// O n8n retorna objeto com itemProperties array para fixedCollection com multipleValues
+		// n8n returns object with itemProperties array for fixedCollection with multipleValues
 		let items: any[] = [];
 		if (itemsData && itemsData.itemProperties && Array.isArray(itemsData.itemProperties)) {
 			items = itemsData.itemProperties.map((item: any) => ({
@@ -469,16 +441,19 @@ export class PagBankSimple implements INodeType {
 				unit_amount: item.unit_amount || 0
 			}));
 		} else {
-			console.log('⚠️ itemsData não é válido:', typeof itemsData, itemsData);
 			items = [];
 		}
 		
-		console.log('📦 Items finais (array):', items);
 		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank não encontradas');
+			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
+		}
+		
+		const connectKey = (credentials as any).connectKey;
+		if (!connectKey) {
+			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
 		}
 
 		const body: any = {
@@ -504,40 +479,27 @@ export class PagBankSimple implements INodeType {
 			],
 		};
 
-		// Adicionar reference_id apenas se informado
+		// Add reference_id only if provided
 		if (referenceId && referenceId.trim()) {
 			body.reference_id = referenceId.trim();
 		}
 
 		if (notificationUrl) {
-			// Validar comprimento da URL (máximo 100 caracteres)
+			// Validate URL length (maximum 100 characters)
 			if (notificationUrl.length > 100) {
-				throw new NodeOperationError(this.getNode(), 'URL de notificação deve ter no máximo 100 caracteres');
+				throw new NodeOperationError(this.getNode(), 'Notification URL must have maximum 100 characters');
 			}
 			body.notification_urls = [notificationUrl.trim()];
 		}
 
 		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
-		const connectKey = (credentials as any).connectKey;
 		const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
 		let url = `${baseURL}/connect/ws/orders`;
 		if (isSandbox) {
 			url += '?isSandbox=1';
 		}
 
-		const options: any = {
-			method: 'POST',
-			url,
-			headers: {
-				'Authorization': `Bearer ${(credentials as any).connectKey}`,
-				'Platform': (credentials as any).platform || 'n8n',
-				'Content-Type': 'application/json',
-			},
-			body,
-			json: true,
-		};
-
-		const response = await this.helpers.request(options);
+		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/checkouts', body);
 		return response;
 	}
 
@@ -546,35 +508,22 @@ export class PagBankSimple implements INodeType {
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank não encontradas');
+			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
 		}
-
-		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
+		
 		const connectKey = (credentials as any).connectKey;
-		const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
-		let url = `${baseURL}/connect/ws/orders/${orderId}`;
-		if (isSandbox) {
-			url += url.includes('?') ? '&isSandbox=1' : '?isSandbox=1';
+		if (!connectKey) {
+			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
 		}
 
-		const options: any = {
-			method: 'GET',
-			url,
-			headers: {
-				'Authorization': `Bearer ${(credentials as any).connectKey}`,
-				'Platform': (credentials as any).platform || 'n8n',
-			},
-			json: true,
-		};
-
-		const response = await this.helpers.request(options);
+		const response = await pagBankConnectRequest.call(this, 'GET', `/connect/ws/orders/${orderId}`);
 		return response;
 	}
 
 	private async validateConnectKey(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank Connect não encontradas');
+			throw new NodeOperationError(this.getNode(), 'PagBank Connect credentials not found');
 		}
 
 		const connectKey = (credentials as any).connectKey;
@@ -582,7 +531,7 @@ export class PagBankSimple implements INodeType {
 		
 		return {
 			...validation,
-			connectKey: connectKey.substring(0, 10) + '...', // Mascarar a chave
+			connectKey: connectKey.substring(0, 10) + '...', // Mask the key
 			environment: connectKey.startsWith('CONSANDBOX') ? 'Sandbox' : 'Produção',
 			validatedAt: new Date().toISOString(),
 		};
@@ -594,9 +543,8 @@ export class PagBankSimple implements INodeType {
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
 		const itemsData = this.getNodeParameter('items', itemIndex) as any;
-		console.log('🔍 Debug itemsData:', JSON.stringify(itemsData, null, 2));
 		
-		// O n8n retorna objeto com itemProperties array para fixedCollection com multipleValues
+		// n8n returns object with itemProperties array for fixedCollection with multipleValues
 		let items: any[] = [];
 		if (itemsData && itemsData.itemProperties && Array.isArray(itemsData.itemProperties)) {
 			items = itemsData.itemProperties.map((item: any) => ({
@@ -606,11 +554,9 @@ export class PagBankSimple implements INodeType {
 				unit_amount: item.unit_amount || 0
 			}));
 		} else {
-			console.log('⚠️ itemsData não é válido:', typeof itemsData, itemsData);
 			items = [];
 		}
 		
-		console.log('📦 Items finais (array):', items);
 		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
 		const cardData = this.getNodeParameter('cardData.card', itemIndex) as any;
 		const installments = this.getNodeParameter('installments', itemIndex) as number;
@@ -618,15 +564,20 @@ export class PagBankSimple implements INodeType {
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank não encontradas');
+			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
+		}
+		
+		const connectKey = (credentials as any).connectKey;
+		if (!connectKey) {
+			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
 		}
 
-		// Obter chave pública de criptografia
+		// Get encryption public key
 		const nodeInstance = new PagBankSimple();
 		const publicKey = await nodeInstance.getEncryptionPublicKey.call(this);
 		
-		// Criptografar dados do cartão usando JavaScript externo
-		const cardToken = await nodeInstance.encryptCardData.call(nodeInstance, cardData, publicKey);
+		// Encrypt card data using external JavaScript
+		const cardToken = await nodeInstance.encryptCardData.call(this, cardData, publicKey);
 
 		const body: any = {
 			customer: {
@@ -661,156 +612,126 @@ export class PagBankSimple implements INodeType {
 			],
 		};
 
-		// Adicionar reference_id apenas se informado
+		// Add reference_id only if provided
 		if (referenceId && referenceId.trim()) {
 			body.reference_id = referenceId.trim();
 		}
 
 		if (notificationUrl) {
-			// Validar comprimento da URL (máximo 100 caracteres)
+			// Validate URL length (maximum 100 characters)
 			if (notificationUrl.length > 100) {
-				throw new NodeOperationError(this.getNode(), 'URL de notificação deve ter no máximo 100 caracteres');
+				throw new NodeOperationError(this.getNode(), 'Notification URL must have maximum 100 characters');
 			}
 			body.notification_urls = [notificationUrl.trim()];
 		}
 
-		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
-		const connectKey = (credentials as any).connectKey;
-		const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
-		let url = `${baseURL}/connect/ws/orders`;
-		if (isSandbox) {
-			url += '?isSandbox=1';
-		}
-
-		const options: any = {
-			method: 'POST',
-			url,
-			headers: {
-				'Authorization': `Bearer ${connectKey}`,
-				'Platform': 'n8n',
-				'Platform-Version': '1.113.3',
-				'Module-Version': '1.0.0',
-				'Content-Type': 'application/json',
-			},
-			body,
-			json: true,
-		};
-
-		const response = await this.helpers.request(options);
+		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/orders', body);
 		return response;
 	}
 
 	private async getEncryptionPublicKey(this: IExecuteFunctions): Promise<string> {
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'Credenciais do PagBank não encontradas');
+			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
 		}
-
-		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
+		
 		const connectKey = (credentials as any).connectKey;
-		const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
-		let url = `${baseURL}/connect/ws/public-keys`;
-		if (isSandbox) {
-			url += '?isSandbox=1';
+		if (!connectKey) {
+			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
 		}
 
-		const options: any = {
-			method: 'POST',
-			url,
-			headers: {
-				'Authorization': `Bearer ${connectKey}`,
-				'Platform': 'n8n',
-				'Platform-Version': '1.113.3',
-				'Module-Version': '1.0.0',
-				'Content-Type': 'application/json',
-			},
-			body: {
-				type: 'card',
-			},
-			json: true,
-		};
-
-		console.log('🔑 Obtendo chave pública de criptografia...');
-		const response = await this.helpers.request(options);
-		console.log('✅ Chave pública obtida com sucesso');
+		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/public-keys', {
+			type: 'card',
+		});
 		
 		return response.public_key;
 	}
 
-	private async encryptCardData(cardData: any, publicKey: string): Promise<string> {
+	private async encryptCardData(this: IExecuteFunctions, cardData: any, publicKey: string): Promise<string> {
+		// Map the card data fields to match the parameter names
+		const cardInfo: any = {
+			number: cardData.number,
+			exp_month: cardData.expMonth,
+			exp_year: cardData.expYear,
+			security_code: cardData.securityCode,
+			holder: cardData.holder
+		};
+		
+		// Validate required card data fields
+		const requiredFields = ['number', 'exp_month', 'exp_year', 'security_code', 'holder'];
+		const missingFields = requiredFields.filter(field => !cardInfo[field] || cardInfo[field].toString().trim() === '');
+		
+		if (missingFields.length > 0) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				`Missing required card data fields: ${missingFields.join(', ')}. Please provide all card information.`
+			);
+		}
+		
+		// Validate card number format (basic validation)
+		const cardNumber = cardInfo.number.toString().replace(/\s/g, '');
+		if (!/^\d{13,19}$/.test(cardNumber)) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				'Invalid card number format. Card number must contain 13-19 digits.'
+			);
+		}
+		
+		// Validate expiration month
+		const expMonth = parseInt(cardInfo.exp_month.toString());
+		if (expMonth < 1 || expMonth > 12) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				'Invalid expiration month. Month must be between 1 and 12.'
+			);
+		}
+		
+		// Validate expiration year
+		const expYear = parseInt(cardInfo.exp_year.toString());
+		const currentYear = new Date().getFullYear();
+		if (expYear < currentYear || expYear > currentYear + 20) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				'Invalid expiration year. Year must be between current year and 20 years in the future.'
+			);
+		}
+		
+		// Validate security code
+		const securityCode = cardInfo.security_code.toString();
+		if (!/^\d{3,4}$/.test(securityCode)) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				'Invalid security code. Security code must contain 3 or 4 digits.'
+			);
+		}
+		
+		// Validate holder name
+		const holder = cardInfo.holder.toString().trim();
+		if (holder.length < 2) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				'Invalid card holder name. Name must contain at least 2 characters.'
+			);
+		}
+		
 		try {
-			console.log('🔐 Criptografando dados do cartão usando SDK PagSeguro...');
-			console.log('📋 Dados do cartão (mascarados):', {
-				holder: cardData.holder,
-				number: cardData.number.replace(/\d(?=\d{4})/g, '*'),
-				expMonth: cardData.expMonth,
-				expYear: cardData.expYear,
-				securityCode: '***',
-			});
-
-			// Carregar o SDK do PagSeguro
-			const https = require('https');
-			const { promisify } = require('util');
-			
-			// Função para fazer requisição HTTPS
-			const makeRequest = (url: string): Promise<string> => {
-				return new Promise((resolve, reject) => {
-					https.get(url, (res: any) => {
-						let data = '';
-						res.on('data', (chunk: any) => data += chunk);
-						res.on('end', () => resolve(data));
-					}).on('error', reject);
-				});
-			};
-
-			// Baixar o SDK do PagSeguro
-			const sdkUrl = 'https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js';
-			const sdkCode = await makeRequest(sdkUrl);
-			
-			// Criar contexto para executar o SDK
-			const vm = require('vm');
-			const context: any = {
-				navigator: {},
-				window: {},
-				console: console,
-				require: require,
-				module: { exports: {} },
-				exports: {},
-				global: global,
-				Buffer: Buffer,
-				process: process
-			};
-			
-			// Executar o SDK
-			vm.createContext(context);
-			vm.runInContext(sdkCode, context);
-			
-			// Verificar se PagSeguro está disponível
-			if (!context.PagSeguro || !context.PagSeguro.encryptCard) {
-				throw new Error('SDK PagSeguro não carregado corretamente');
-			}
-			
-			// Criptografar os dados do cartão
-			const encryptedCard = context.PagSeguro.encryptCard({
+			// Use the real PagBank encryption library
+			const encryptedToken = encryptCard({
 				publicKey: publicKey,
-				holder: cardData.holder,
-				number: cardData.number,
-				expMonth: cardData.expMonth,
-				expYear: cardData.expYear,
-				securityCode: cardData.securityCode
+				holder: holder,
+				number: cardNumber,
+				expMonth: expMonth.toString().padStart(2, '0'),
+				expYear: expYear.toString(),
+				securityCode: securityCode
 			});
 			
-			console.log('✅ Cartão criptografado com sucesso');
-			return encryptedCard.encryptedCard;
+			return encryptedToken;
 			
-		} catch (error) {
-			console.error('❌ Erro ao criptografar cartão:', error);
-			
-			// Fallback: retornar token simulado para desenvolvimento
-			const fallbackToken = `encrypted_card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-			console.log('⚠️ Usando token simulado como fallback:', fallbackToken);
-			
-			return fallbackToken;
+		} catch (error: any) {
+			throw new NodeOperationError(
+				this.getNode(), 
+				`Failed to encrypt card data: ${error.message}`
+			);
 		}
 	}
 }
