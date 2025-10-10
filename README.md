@@ -110,6 +110,13 @@ MIT License - see LICENSE file for details.
 
 ## Changelog
 
+### v1.1.0
+- ✅ **Real PagBank encryption** - Now uses the official PagBank JavaScript SDK for card encryption
+- ✅ **Improved error handling** - Better error messages and validation
+- ✅ **Community compliance** - Full compliance with n8n community guidelines
+- ✅ **Enhanced security** - Proper card data encryption using PagSeguro.encryptCard()
+- ✅ **Better documentation** - Updated examples and troubleshooting
+
 ### v1.0.0
 - Initial release
 - Support for PIX, Card, Boleto
