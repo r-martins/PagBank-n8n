@@ -110,6 +110,12 @@ MIT License - see LICENSE file for details.
 
 ## Changelog
 
+### v1.2.0
+- ✅ **Fixed icon display** - Icons now display correctly in n8n workflows
+- ✅ **Enhanced error handling** - Specific PagBank API error messages with actionable guidance
+- ✅ **UX Guidelines compliance** - Complete compliance with n8n community UX guidelines
+- ✅ **Improved user experience** - Better placeholders, descriptions, and error messages
+
 ### v1.1.0
 - ✅ **Real PagBank encryption** - Now uses the official PagBank JavaScript SDK for card encryption
 - ✅ **Improved error handling** - Better error messages and validation
