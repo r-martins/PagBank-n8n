@@ -92,7 +92,7 @@ export async function pagBankConnectRequest(
 			'Authorization': `Bearer ${connectKey}`,
 			'Platform': 'n8n',
 			'Platform-Version': '1.113.3',
-			'Module-Version': '1.2.0',
+			'Module-Version': '1.3.0',
 			'Content-Type': 'application/json',
 		},
 		json: true,

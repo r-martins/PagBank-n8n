@@ -2,7 +2,7 @@ const { src, dest, series } = require('gulp');
 
 function buildIcons() {
 	return src('nodes/**/*.svg')
-		.pipe(dest('dist/'));
+		.pipe(dest('dist/nodes/'));
 }
 
 function buildLib() {

@@ -6,7 +6,6 @@ n8n integration with PagBank Connect for Brazilian payment processing.
 
 - ✅ **PIX** - Instant payments with QR Code
 - ✅ **Credit/Debit Card** - Secure card processing
-- ✅ **Boleto** - Bank slips for payment
 - ✅ **Payment Links** - Custom checkout
 - ✅ **Recurring Subscriptions** - Recurring payments (coming soon)
 - ✅ **Webhooks** - Real-time notifications
@@ -108,26 +107,6 @@ MIT License - see LICENSE file for details.
 4. Push to your local branch
 5. Open a Pull Request to the `develop` branch
 
-## Changelog
-
-### v1.2.0
-- ✅ **Fixed icon display** - Icons now display correctly in n8n workflows
-- ✅ **Enhanced error handling** - Specific PagBank API error messages with actionable guidance
-- ✅ **UX Guidelines compliance** - Complete compliance with n8n community UX guidelines
-- ✅ **Improved user experience** - Better placeholders, descriptions, and error messages
-
-### v1.1.0
-- ✅ **Real PagBank encryption** - Now uses the official PagBank JavaScript SDK for card encryption
-- ✅ **Improved error handling** - Better error messages and validation
-- ✅ **Community compliance** - Full compliance with n8n community guidelines
-- ✅ **Enhanced security** - Proper card data encryption using PagSeguro.encryptCard()
-- ✅ **Better documentation** - Updated examples and troubleshooting
-
-### v1.0.0
-- Initial release
-- Support for PIX, Card, Boleto
-- Payment links
-- Webhooks
 
 ## Roadmap
 - More installment options
