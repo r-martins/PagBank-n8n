@@ -1,69 +1,12 @@
 // PagBank Encryption Wrapper
 // This file provides a TypeScript interface to the PagBank JavaScript SDK
+// Uses our N8N-compatible implementation
 
-import * as fs from 'fs';
-import * as path from 'path';
+// Import our N8N-compatible PagSeguro SDK
+const PagSeguroSDK = require('./pagseguro-n8n-compatible.js');
 
-// Load the PagBank SDK
-const sdkPath = path.join(__dirname, '..', '..', 'PagBank', 'pagseguro.min.js');
-const sdkCode = fs.readFileSync(sdkPath, 'utf8');
-
-// Create a safe execution context for the SDK
-const createSDKContext = () => {
-    // Create a minimal global-like object
-    const globalObj = {
-        window: {},
-        navigator: {},
-        console: console,
-        Buffer: Buffer,
-        setTimeout: setTimeout,
-        setInterval: setInterval,
-        clearTimeout: clearTimeout,
-        clearInterval: clearInterval,
-        Date: Date,
-        Math: Math,
-        JSON: JSON,
-        Array: Array,
-        Object: Object,
-        String: String,
-        Number: Number,
-        Boolean: Boolean,
-        RegExp: RegExp,
-        Error: Error,
-        TypeError: TypeError,
-        ReferenceError: ReferenceError,
-        SyntaxError: SyntaxError,
-        RangeError: RangeError,
-        EvalError: EvalError,
-        URIError: URIError,
-        parseInt: parseInt,
-        parseFloat: parseFloat,
-        isNaN: isNaN,
-        isFinite: isFinite,
-        encodeURIComponent: encodeURIComponent,
-        decodeURIComponent: decodeURIComponent,
-        encodeURI: encodeURI,
-        decodeURI: decodeURI,
-        escape: escape,
-        unescape: unescape,
-        Infinity: Infinity,
-        NaN: NaN,
-        undefined: undefined,
-        null: null,
-        true: true,
-        false: false
-    };
-
-    // Execute the SDK in this context
-    const vm = require('vm');
-    const context = vm.createContext(globalObj);
-    vm.runInContext(sdkCode, context);
-    
-    return context;
-};
-
-// Cache the SDK context
-let sdkContext: any = null;
+// Export both the internal module and the wrapper function
+export { PagSeguroSDK as PagBankSDK };
 
 export function encryptCard(cardData: {
     publicKey: string;
@@ -74,42 +17,25 @@ export function encryptCard(cardData: {
     securityCode: string;
 }): string {
     try {
-        // Initialize SDK context if not already done
-        if (!sdkContext) {
-            sdkContext = createSDKContext();
-        }
-
-        // Check if PagSeguro is available
-        if (!sdkContext.PagSeguro || !sdkContext.PagSeguro.encryptCard) {
-            throw new Error('PagBank SDK not loaded or encryptCard method not found');
-        }
-
-        // Prepare card data in the format expected by PagSeguro.encryptCard
-        const cardDataForEncryption = {
-            publicKey: cardData.publicKey,
-            holder: cardData.holder,
-            number: cardData.number,
-            expMonth: cardData.expMonth,
-            expYear: cardData.expYear,
-            securityCode: cardData.securityCode
-        };
-
-        // Call the real PagSeguro.encryptCard method
-        const encryptedResult = sdkContext.PagSeguro.encryptCard(cardDataForEncryption);
+        const result = PagSeguroSDK.encryptCard(cardData);
         
-        // Check if the result is valid
-        if (!encryptedResult || !encryptedResult.encryptedCard) {
-            if (encryptedResult && encryptedResult.errors && encryptedResult.errors.length > 0) {
-                const firstError = encryptedResult.errors[0];
-                const errorMessage = firstError.message || firstError.description || 'Encryption failed';
-                const errorCode = firstError.code ? ` (Code: ${firstError.code})` : '';
-                throw new Error(`PagBank encryption failed: ${errorMessage}${errorCode}`);
+        if (result.hasErrors) {
+            if (result.errors && result.errors.length > 0) {
+                const firstError = result.errors[0];
+                if (firstError) {
+                    const errorMessage = firstError.message || 'Encryption failed';
+                    const errorCode = firstError.code ? ` (Code: ${firstError.code})` : '';
+                    throw new Error(`PagBank encryption failed: ${errorMessage}${errorCode}`);
+                }
             }
-            throw new Error('PagSeguro.encryptCard returned invalid result');
+            throw new Error('PagBank encryption failed');
         }
         
-        // Return the encrypted card token
-        return encryptedResult.encryptedCard;
+        if (!result.encryptedCard) {
+            throw new Error('PagBank encryption returned no result');
+        }
+        
+        return result.encryptedCard;
         
     } catch (error: any) {
         throw new Error(`Failed to encrypt card data: ${error.message}`);
