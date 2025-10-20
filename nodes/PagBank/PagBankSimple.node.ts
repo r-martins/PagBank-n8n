@@ -519,14 +519,7 @@ export class PagBankSimple implements INodeType {
 			body.notification_urls = [notificationUrl.trim()];
 		}
 
-		const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
-		const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
-		let url = `${baseURL}/connect/ws/orders`;
-		if (isSandbox) {
-			url += '?isSandbox=1';
-		}
-
-		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/checkouts', body);
+		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/orders', body);
 		return response;
 	}
 

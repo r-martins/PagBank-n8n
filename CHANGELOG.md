@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2024-10-20
+
+### 🐛 Bug Fixes
+- **Fixed CreatePixOrder endpoint**: Corrected API endpoint from `/connect/ws/checkouts` to `/connect/ws/orders` for PIX order creation
+- **Resolved URL duplication issue**: Fixed double URL construction in `createPixOrder` method that was causing request failures
+- **Improved error handling**: Better error messages for PIX order creation failures
+
+### 🔧 Technical Improvements
+- **API consistency**: All order creation methods now use correct endpoints
+- **Request optimization**: Removed redundant URL construction in `pagBankConnectRequest` calls
+- **Better debugging**: Clearer error messages for troubleshooting
+
+### 📋 What's Fixed
+- ✅ CreatePixOrder now creates PIX orders instead of checkout links
+- ✅ Proper API endpoint usage for all order types
+- ✅ Eliminated "Request failed" errors in PIX order creation
+- ✅ Consistent behavior across all payment methods
+
+---
+
 ## [1.3.0] - 2024-10-15
 
 ### 🚀 Major Changes
