@@ -2,6 +2,12 @@
 
 n8n integration with PagBank Connect for Brazilian payment processing.
 
+
+![NPM Downloads](https://img.shields.io/npm/d18m/n8n-nodes-pagbank-connect?label=downloads%20last%2018%20months)
+![NPM Version](https://img.shields.io/npm/v/n8n-nodes-pagbank-connect)
+![NPM License](https://img.shields.io/npm/l/n8n-nodes-pagbank-connect)
+![NPM Last Update](https://img.shields.io/npm/last-update/n8n-nodes-pagbank-connect)
+
 ## Features
 
 - ✅ **PIX** - Instant payments with QR Code
