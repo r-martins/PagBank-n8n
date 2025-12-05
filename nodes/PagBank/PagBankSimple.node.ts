@@ -3,6 +3,7 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	NodeConnectionTypes,
 	NodeOperationError,
 } from 'n8n-workflow';
 
@@ -21,8 +22,8 @@ export class PagBankSimple implements INodeType {
 		defaults: {
 			name: 'PagBank',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'pagBankConnect',
@@ -68,19 +69,6 @@ export class PagBankSimple implements INodeType {
 				},
 				],
 				default: 'createPaymentLink',
-			},
-			{
-				displayName: 'Reference ID',
-				name: 'referenceId',
-				type: 'string',
-				default: '',
-				placeholder: 'e.g. order123',
-				description: 'Unique ID to identify the order in your system',
-				displayOptions: {
-					show: {
-						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
-					},
-				},
 			},
 			{
 				displayName: 'Customer Name',
@@ -206,32 +194,6 @@ export class PagBankSimple implements INodeType {
 					},
 				},
 			},
-			{
-				displayName: 'Redirect URL',
-				name: 'redirectUrl',
-				type: 'string',
-				default: '',
-				placeholder: 'e.g. https://example.com/success',
-				description: 'URL where the customer will be redirected after payment',
-				displayOptions: {
-					show: {
-						operation: ['createPaymentLink'],
-					},
-				},
-			},
-			{
-				displayName: 'Notification URL',
-				name: 'notificationUrl',
-				type: 'string',
-				default: '',
-				placeholder: 'e.g. https://example.com/webhook',
-				description: 'URL to receive payment notifications (maximum 100 characters)',
-				displayOptions: {
-					show: {
-						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
-					},
-				},
-			},
 			// Campos específicos para cobrança em cartão
 			{
 				displayName: 'Card Data',
@@ -298,31 +260,6 @@ export class PagBankSimple implements INodeType {
 				],
 			},
 			{
-				displayName: 'Installments',
-				name: 'installments',
-				type: 'number',
-				default: 1,
-				description: 'Number of installments (1 to 12)',
-				displayOptions: {
-					show: {
-						operation: ['createCreditCardCharge'],
-					},
-				},
-			},
-			{
-				displayName: 'Statement Descriptor',
-				name: 'softDescriptor',
-				type: 'string',
-				default: '',
-				placeholder: 'e.g. MyCompany',
-				description: 'Name that will appear on customer statement (maximum 13 characters)',
-				displayOptions: {
-					show: {
-						operation: ['createCreditCardCharge'],
-					},
-				},
-			},
-			{
 				displayName: 'Order ID',
 				name: 'orderId',
 				type: 'string',
@@ -337,16 +274,64 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
-				displayName: 'Simplify',
-				name: 'simplify',
-				type: 'boolean',
-				default: true,
-				description: 'Whether to return a simplified version of the response instead of the raw data',
+				displayName: 'Additional Fields',
+				name: 'additionalFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
 				displayOptions: {
 					show: {
-						operation: ['getOrderStatus', 'validateConnectKey'],
+						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge', 'getOrderStatus', 'validateConnectKey'],
 					},
 				},
+				options: [
+					{
+						displayName: 'Reference ID',
+						name: 'referenceId',
+						type: 'string',
+						default: '',
+						placeholder: 'e.g. order123',
+						description: 'Unique ID to identify the order in your system',
+					},
+					{
+						displayName: 'Redirect URL',
+						name: 'redirectUrl',
+						type: 'string',
+						default: '',
+						placeholder: 'e.g. https://example.com/success',
+						description: 'URL where the customer will be redirected after payment',
+					},
+					{
+						displayName: 'Notification URL',
+						name: 'notificationUrl',
+						type: 'string',
+						default: '',
+						placeholder: 'e.g. https://example.com/webhook',
+						description: 'URL to receive payment notifications (maximum 100 characters)',
+					},
+					{
+						displayName: 'Installments',
+						name: 'installments',
+						type: 'number',
+						default: 1,
+						description: 'Number of installments (1 to 12)',
+					},
+					{
+						displayName: 'Statement Descriptor',
+						name: 'softDescriptor',
+						type: 'string',
+						default: '',
+						placeholder: 'e.g. MyCompany',
+						description: 'Name that will appear on customer statement (maximum 13 characters)',
+					},
+					{
+						displayName: 'Simplify',
+						name: 'simplify',
+						type: 'boolean',
+						default: true,
+						description: 'Whether to return a simplified version of the response instead of the raw data',
+					},
+				],
 			},
 		],
 	};
@@ -396,7 +381,8 @@ export class PagBankSimple implements INodeType {
 	}
 
 	private async createPaymentLink(this: IExecuteFunctions, itemIndex: number): Promise<any> {
-		const referenceId = this.getNodeParameter('referenceId', itemIndex) as string;
+		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
+		const referenceId = additionalFields?.referenceId as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
@@ -416,8 +402,8 @@ export class PagBankSimple implements INodeType {
 		}
 		
 		const paymentMethods = this.getNodeParameter('paymentMethods', itemIndex) as string[];
-		const redirectUrl = this.getNodeParameter('redirectUrl', itemIndex) as string;
-		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
+		const redirectUrl = additionalFields?.redirectUrl as string;
+		const notificationUrl = additionalFields?.notificationUrl as string;
 
 		const body: any = {
 			reference_id: referenceId || `PEDIDO-${Date.now()}`,
@@ -452,7 +438,8 @@ export class PagBankSimple implements INodeType {
 	}
 	
 	private async createPixOrder(this: IExecuteFunctions, itemIndex: number): Promise<any> {
-		const referenceId = this.getNodeParameter('referenceId', itemIndex) as string;
+		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
+		const referenceId = additionalFields?.referenceId as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
@@ -471,7 +458,7 @@ export class PagBankSimple implements INodeType {
 			items = [];
 		}
 		
-		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
+		const notificationUrl = additionalFields?.notificationUrl as string;
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
@@ -558,7 +545,8 @@ export class PagBankSimple implements INodeType {
 	}
 
 	private async createCreditCardCharge(this: IExecuteFunctions, itemIndex: number): Promise<any> {
-		const referenceId = this.getNodeParameter('referenceId', itemIndex) as string;
+		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
+		const referenceId = additionalFields?.referenceId as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
@@ -577,10 +565,10 @@ export class PagBankSimple implements INodeType {
 			items = [];
 		}
 		
-		const notificationUrl = this.getNodeParameter('notificationUrl', itemIndex) as string;
+		const notificationUrl = additionalFields?.notificationUrl as string;
 		const cardData = this.getNodeParameter('cardData.card', itemIndex) as any;
-		const installments = this.getNodeParameter('installments', itemIndex) as number;
-		const softDescriptor = this.getNodeParameter('softDescriptor', itemIndex) as string;
+		const installments = additionalFields?.installments as number || 1;
+		const softDescriptor = additionalFields?.softDescriptor as string;
 
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
@@ -754,6 +742,8 @@ export class PagBankSimple implements INodeType {
 		
 		try {
 			// Use the real PagBank encryption library
+			// Logger is optional - pass undefined if not available
+			const logger = undefined; // Logger not directly available in IExecuteFunctions context
 			const encryptedToken = encryptCard({
 				publicKey: publicKey,
 				holder: holder,
@@ -761,7 +751,7 @@ export class PagBankSimple implements INodeType {
 				expMonth: expMonth.toString().padStart(2, '0'),
 				expYear: expYear.toString(),
 				securityCode: securityCode
-			});
+			}, logger);
 			
 			return encryptedToken;
 			
@@ -773,4 +763,5 @@ export class PagBankSimple implements INodeType {
 		}
 	}
 }
+
 

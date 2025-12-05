@@ -27,7 +27,7 @@ export class PagBankConnect implements ICredentialType {
 				'Authorization': '=Bearer {{$credentials.connectKey}}',
 				'Platform': 'n8n',
 				'Platform-Version': '1.113.3',
-				'Module-Version': '1.3.1',
+				'Module-Version': '1.3.2',
 			},
 		},
 	};
@@ -37,10 +37,9 @@ export class PagBankConnect implements ICredentialType {
 			url: 'https://ws.pbintegracoes.com/pspro/v7/connect/connectInfo',
 			method: 'GET',
 			headers: {
-				'Authorization': '=Bearer {{$credentials.connectKey}}',
 				'Platform': 'n8n',
 				'Platform-Version': '1.113.3',
-				'Module-Version': '1.3.1',
+				'Module-Version': '1.3.2',
 			},
 		},
 	};

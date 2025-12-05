@@ -15,9 +15,9 @@ export function encryptCard(cardData: {
     expMonth: string;
     expYear: string;
     securityCode: string;
-}): string {
+}, logger?: any): string {
     try {
-        const result = PagSeguroSDK.encryptCard(cardData);
+        const result = PagSeguroSDK.encryptCard(cardData, logger);
         
         if (result.hasErrors) {
             if (result.errors && result.errors.length > 0) {
