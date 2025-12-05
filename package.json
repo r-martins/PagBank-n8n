@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-pagbank-connect",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "n8n integration with PagBank Connect for Brazilian payment processing (PIX, Boleto, Credit Card, Payment Link, etc)",
   "keywords": [
     "n8n-community-node-package",
