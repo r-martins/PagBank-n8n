@@ -39,7 +39,7 @@ export class PagBankConnect implements ICredentialType {
 			headers: {
 				'Platform': 'n8n',
 				'Platform-Version': '1.113.3',
-				'Module-Version': '1.3.2',
+				'Module-Version': '1.3.3',
 			},
 		},
 	};

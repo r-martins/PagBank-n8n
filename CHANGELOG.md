@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2024-10-20
+
+### 🔧 Marketplace Compliance
+- **Replaced console statements**: All console.log/error/warn statements replaced with n8n Logger support
+- **Fixed node structure**: Updated Inputs/Outputs to use `NodeConnectionTypes.Main` as per n8n standards
+- **Removed n8n-workflow from devDependencies**: Cleaned up dependencies to comply with marketplace requirements
+- **Fixed credentials structure**: Removed unnecessary Authorization header from test request
+- **Improved field organization**: Moved optional fields to "Additional Fields" collection for better UX
+
+### 🐛 Bug Fixes
+- **Fixed workflow parameter error**: Removed displayOptions from collection child parameters (fixes "Max iterations reached" error)
+- **Fixed collection structure**: Properly organized optional fields in Additional Fields collection
+
+### 📋 What's Changed
+- ✅ All console statements now use optional logger support
+- ✅ Node structure compliant with n8n marketplace standards
+- ✅ Workflow parameter dependencies resolved
+- ✅ Better organization of optional fields
+- ✅ Cleaner dependency structure
+
+---
+
 ## [1.3.2] - 2024-10-20
 
 ### 🐛 Bug Fixes
