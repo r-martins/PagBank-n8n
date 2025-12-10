@@ -80,7 +80,20 @@ export class PagBankSimple implements INodeType {
 				description: 'Full customer name',
 				displayOptions: {
 					show: {
-						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
+						operation: ['createPixOrder', 'createCreditCardCharge'],
+					},
+				},
+			},
+			{
+				displayName: 'Customer Name',
+				name: 'customerName',
+				type: 'string',
+				default: '',
+				placeholder: 'e.g. John Smith',
+				description: 'Full customer name (optional for payment links)',
+				displayOptions: {
+					show: {
+						operation: ['createPaymentLink'],
 					},
 				},
 			},
@@ -94,7 +107,20 @@ export class PagBankSimple implements INodeType {
 				description: 'Customer email',
 				displayOptions: {
 					show: {
-						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
+						operation: ['createPixOrder', 'createCreditCardCharge'],
+					},
+				},
+			},
+			{
+				displayName: 'Customer Email',
+				name: 'customerEmail',
+				type: 'string',
+				default: '',
+				placeholder: 'e.g. john@example.com',
+				description: 'Customer email (optional for payment links)',
+				displayOptions: {
+					show: {
+						operation: ['createPaymentLink'],
 					},
 				},
 			},
@@ -108,7 +134,20 @@ export class PagBankSimple implements INodeType {
 				description: 'Customer CPF (11 digits) or CNPJ (14 digits)',
 				displayOptions: {
 					show: {
-						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
+						operation: ['createPixOrder', 'createCreditCardCharge'],
+					},
+				},
+			},
+			{
+				displayName: 'Customer CPF/CNPJ',
+				name: 'customerTaxId',
+				type: 'string',
+				default: '',
+				placeholder: 'e.g. 12345678901',
+				description: 'Customer CPF (11 digits) or CNPJ (14 digits) (optional for payment links)',
+				displayOptions: {
+					show: {
+						operation: ['createPaymentLink'],
 					},
 				},
 			},
@@ -407,11 +446,6 @@ export class PagBankSimple implements INodeType {
 
 		const body: any = {
 			reference_id: referenceId || `PEDIDO-${Date.now()}`,
-			customer: {
-				name: customerName,
-				email: customerEmail,
-				tax_id: customerTaxId.replace(/\D/g, ''),
-			},
 			items: items.map((item: any, index: number) => ({
 				reference_id: item.reference_id || `ITEM-${index + 1}`,
 				name: item.name,
@@ -420,6 +454,20 @@ export class PagBankSimple implements INodeType {
 			})),
 			payment_methods: paymentMethods.map(method => ({ type: method })),
 		};
+
+		// Only include customer if at least one field is provided
+		if (customerName || customerEmail || customerTaxId) {
+			body.customer = {};
+			if (customerName) {
+				body.customer.name = customerName;
+			}
+			if (customerEmail) {
+				body.customer.email = customerEmail;
+			}
+			if (customerTaxId) {
+				body.customer.tax_id = customerTaxId.replace(/\D/g, '');
+			}
+		}
 
 		if (redirectUrl) {
 			body.redirect_url = redirectUrl;
