@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2024-12-05
+
+### ✨ New Features
+- **Optional customer fields for payment links**: Customer name, email and CPF/CNPJ are now optional when creating payment links
+- **Flexible customer data**: Customer object is only included in the request if at least one customer field is provided
+
+### 🔧 Technical Improvements
+- **Better UX for payment links**: Users can create payment links without requiring customer information upfront
+- **Conditional customer object**: Improved request structure to handle optional customer data
+
+### 📋 What's Changed
+- ✅ Customer fields are optional for `createPaymentLink` operation
+- ✅ Customer fields remain required for `createPixOrder` and `createCreditCardCharge`
+- ✅ Customer object only sent if at least one field is provided
+
+---
+
+## [1.3.3] - 2024-10-20
+
+### 🔧 Marketplace Compliance
+- **Replaced console statements**: All console.log/error/warn statements replaced with n8n Logger support
+- **Fixed node structure**: Updated Inputs/Outputs to use `NodeConnectionTypes.Main` as per n8n standards
+- **Removed n8n-workflow from devDependencies**: Cleaned up dependencies to comply with marketplace requirements
+- **Fixed credentials structure**: Removed unnecessary Authorization header from test request
+- **Improved field organization**: Moved optional fields to "Additional Fields" collection for better UX
+
+### 🐛 Bug Fixes
+- **Fixed workflow parameter error**: Removed displayOptions from collection child parameters (fixes "Max iterations reached" error)
+- **Fixed collection structure**: Properly organized optional fields in Additional Fields collection
+
+### 📋 What's Changed
+- ✅ All console statements now use optional logger support
+- ✅ Node structure compliant with n8n marketplace standards
+- ✅ Workflow parameter dependencies resolved
+- ✅ Better organization of optional fields
+- ✅ Cleaner dependency structure
+
+---
+
 ## [1.3.2] - 2024-10-20
 
 ### 🐛 Bug Fixes
