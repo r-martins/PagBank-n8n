@@ -47,8 +47,8 @@ If you need a Test Connect Key, [click here](https://pbintegracoes.com/connect/s
 - **Check order status** - Queries the status of an ORDER with PagBank (must have been generated with this connect key)
 - **Validate Connect Key** - Validates the Connect Key configured in your credentials
 
-### PagBank Webhook
-- **Payment Webhook** - Receives notifications. You can filter notifications by payment status, payment methods or denial reason.
+### PagBank Connect Trigger
+- **Payment Trigger** - Receives notifications. You can filter notifications by payment status, payment methods or denial reason.
 
 ## Data Format
 

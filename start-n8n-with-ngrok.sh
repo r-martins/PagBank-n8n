@@ -97,7 +97,7 @@ show_final_info() {
     echo -e "${YELLOW}│                                                             │${NC}"
     echo -e "${YELLOW}│  🎯 Para configurar webhook:                               │${NC}"
     echo -e "${YELLOW}│     1. Acesse: http://localhost:5678                        │${NC}"
-    echo -e "${YELLOW}│     2. Crie um workflow com 'PagBank Connect Webhook'       │${NC}"
+    echo -e "${YELLOW}│     2. Crie um workflow com 'PagBank Connect Trigger'      │${NC}"
     echo -e "${YELLOW}│     3. Copie a URL do webhook mostrada acima              │${NC}"
     echo -e "${YELLOW}│     4. Configure no PagBank: https://pbintegracoes.com/n8n/eventos │${NC}"
     echo -e "${YELLOW}└─────────────────────────────────────────────────────────────┘${NC}"
