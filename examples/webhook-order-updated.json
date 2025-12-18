@@ -5,7 +5,7 @@
       "parameters": {
         "addCalculatedFields": false
       },
-      "type": "CUSTOM.pagBankTrigger",
+      "type": "n8n-nodes-pagbank-connect.pagBankTrigger",
       "typeVersion": 1,
       "position": [
         0,

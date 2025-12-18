@@ -43,7 +43,7 @@
           }
         }
       },
-      "type": "CUSTOM.pagBank",
+      "type": "n8n-nodes-pagbank-connect.pagBank",
       "typeVersion": 1,
       "position": [
         224,
