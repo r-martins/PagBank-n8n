@@ -1,0 +1,44 @@
+{
+	"node": {
+		"version": 1,
+		"name": "pagBankTrigger",
+		"displayName": "PagBank Connect Trigger",
+		"description": "Trigger to receive PagBank Connect notifications",
+		"defaults": {
+			"name": "PagBank Connect Trigger"
+		},
+		"inputs": [],
+		"outputs": ["main"],
+		"properties": [
+			{
+				"displayName": "Filter by Payment Status",
+				"name": "filterByStatus",
+				"type": "multiOptions",
+				"default": [],
+				"description": "Select payment statuses you want to receive. Leave empty to receive all."
+			},
+			{
+				"displayName": "Filter by Payment Method",
+				"name": "filterByPaymentMethod",
+				"type": "multiOptions",
+				"default": [],
+				"description": "Select payment methods you want to receive. Leave empty to receive all."
+			},
+			{
+				"displayName": "Filter by Decline Reason",
+				"name": "filterByDeclineReason",
+				"type": "multiOptions",
+				"default": [],
+				"description": "Select decline reasons you want to receive. Leave empty to receive all."
+			},
+			{
+				"displayName": "Add Calculated Fields",
+				"name": "addCalculatedFields",
+				"type": "boolean",
+				"default": true,
+				"description": "Adds calculated fields like event, formatted payment method, etc."
+			}
+		]
+	}
+}
+

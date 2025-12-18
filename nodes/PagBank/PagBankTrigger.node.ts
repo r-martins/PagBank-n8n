@@ -5,22 +5,23 @@ import {
 	IWebhookResponseData,
 	INodeType,
 	INodeTypeDescription,
+	NodeConnectionTypes,
 } from 'n8n-workflow';
 
-export class PagBankWebhook implements INodeType {
+export class PagBankTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'PagBank Connect Webhook',
-		name: 'pagBankWebhook',
+		displayName: 'PagBank Connect Trigger',
+		name: 'pagBankTrigger',
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['trigger'],
 		version: 1,
-		description: 'Webhook to receive PagBank Connect notifications',
+		description: 'Trigger to receive PagBank Connect notifications',
 		documentationUrl: 'https://ajuda.pbintegracoes.com/hc/pt-br/articles/40055875188621-Como-testar-as-Triggers-Webhooks-do-PagBank-no-n8n',
 		defaults: {
-			name: 'PagBank Connect Webhook',
+			name: 'PagBank Connect Trigger',
 		},
 		inputs: [],
-		outputs: ['main'],
+		outputs: [NodeConnectionTypes.Main],
 		webhooks: [
 			{
 				name: 'default',
@@ -158,8 +159,8 @@ export class PagBankWebhook implements INodeType {
 
 		// Filter by decline reason
 		if (shouldProcess && filterByDeclineReason.length > 0 && status === 'DECLINED') {
-			const webhookInstance = new PagBankWebhook();
-			const declineReason = webhookInstance.getDeclineReason.call(webhookInstance, paymentResponse);
+			const triggerInstance = new PagBankTrigger();
+			const declineReason = triggerInstance.getDeclineReason.call(triggerInstance, paymentResponse);
 			if (!filterByDeclineReason.includes(declineReason)) {
 				shouldProcess = false;
 			}
@@ -201,11 +202,11 @@ export class PagBankWebhook implements INodeType {
 
 		// Add calculated fields if enabled
 		if (addCalculatedFields) {
-			const webhookInstance = new PagBankWebhook();
-			processedData.event = webhookInstance.getEventType.call(webhookInstance, status, paymentMethod.type);
-			processedData.paymentMethodFormatted = webhookInstance.getPaymentMethodFormatted.call(webhookInstance, paymentMethod.type);
-			processedData.statusFormatted = webhookInstance.getStatusFormatted.call(webhookInstance, status);
-			processedData.declineReason = webhookInstance.getDeclineReason.call(webhookInstance, paymentResponse);
+			const triggerInstance = new PagBankTrigger();
+			processedData.event = triggerInstance.getEventType.call(triggerInstance, status, paymentMethod.type);
+			processedData.paymentMethodFormatted = triggerInstance.getPaymentMethodFormatted.call(triggerInstance, paymentMethod.type);
+			processedData.statusFormatted = triggerInstance.getStatusFormatted.call(triggerInstance, status);
+			processedData.declineReason = triggerInstance.getDeclineReason.call(triggerInstance, paymentResponse);
 			processedData.isPaid = status === 'PAID';
 			processedData.isWaiting = status === 'WAITING';
 			processedData.isDeclined = status === 'DECLINED';
@@ -272,3 +273,4 @@ export class PagBankWebhook implements INodeType {
 		return 'DECLINED_UNKNOWN';
 	}
 }
+

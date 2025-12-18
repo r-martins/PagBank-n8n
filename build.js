@@ -48,9 +48,9 @@ try {
       console.log('✅ PagBankSimple.node.ts copied');
     }
     
-    if (fs.existsSync('nodes/PagBank/PagBankWebhook.node.ts')) {
-      fs.copyFileSync('nodes/PagBank/PagBankWebhook.node.ts', 'dist/nodes/PagBank/PagBankWebhook.node.ts');
-      console.log('✅ PagBankWebhook.node.ts copied');
+    if (fs.existsSync('nodes/PagBank/PagBankTrigger.node.ts')) {
+      fs.copyFileSync('nodes/PagBank/PagBankTrigger.node.ts', 'dist/nodes/PagBank/PagBankTrigger.node.ts');
+      console.log('✅ PagBankTrigger.node.ts copied');
     }
     
     if (fs.existsSync('nodes/PagBank/PagBankUtils.ts')) {
@@ -64,11 +64,44 @@ try {
     }
   }
   
-  // Copy index.js
+  // Copy index.js and other files
   if (fs.existsSync('index.js')) {
     fs.copyFileSync('index.js', 'dist/index.js');
     console.log('✅ index.js copied');
   }
+  
+  // Copy .node.json files
+  if (fs.existsSync('nodes/PagBank/PagBankTrigger.node.json')) {
+    const targetDir = 'dist/nodes/PagBank';
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    fs.copyFileSync('nodes/PagBank/PagBankTrigger.node.json', 'dist/nodes/PagBank/PagBankTrigger.node.json');
+    console.log('✅ PagBankTrigger.node.json copied');
+  }
+  
+  if (fs.existsSync('nodes/PagBank/PagBankSimple.node.json')) {
+    const targetDir = 'dist/nodes/PagBank';
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    fs.copyFileSync('nodes/PagBank/PagBankSimple.node.json', 'dist/nodes/PagBank/PagBankSimple.node.json');
+    console.log('✅ PagBankSimple.node.json copied');
+  }
+  
+  // Remove old webhook files if they exist
+  const oldWebhookFiles = [
+    'dist/nodes/PagBank/PagBankWebhook.node.js',
+    'dist/nodes/PagBank/PagBankWebhook.node.d.ts',
+    'dist/nodes/PagBank/PagBankWebhook.node.ts',
+  ];
+  
+  oldWebhookFiles.forEach(file => {
+    if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+      console.log(`✅ Removed old file: ${file}`);
+    }
+  });
 
   console.log('✅ Directory structure created');
   console.log('📦 Build completed successfully!');

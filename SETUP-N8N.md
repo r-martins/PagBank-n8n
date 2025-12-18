@@ -160,7 +160,7 @@ npm install /Users/martins/www/pagbank-n8n
 
 #### Configurar Webhook
 1. Crie um novo workflow
-2. Adicione o nó **PagBank Webhook**
+2. Adicione o nó **PagBank Connect Trigger**
 3. Configure:
    - **Eventos**: `PAID`, `DECLINED`
    - **Métodos de Pagamento**: (deixe vazio para todos)

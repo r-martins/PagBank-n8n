@@ -42,7 +42,7 @@
     ],
     "nodes": [
       "dist/nodes/PagBank/PagBankSimple.node.js",
-      "dist/nodes/PagBank/PagBankWebhook.node.js"
+      "dist/nodes/PagBank/PagBankTrigger.node.js"
     ]
   },
   "dependencies": {},

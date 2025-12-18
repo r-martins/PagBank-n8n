@@ -5,14 +5,14 @@
       "parameters": {
         "addCalculatedFields": false
       },
-      "type": "CUSTOM.pagBankWebhook",
+      "type": "CUSTOM.pagBankTrigger",
       "typeVersion": 1,
       "position": [
         0,
         0
       ],
       "id": "48fa0430-0382-41f0-baf9-c197ba247b71",
-      "name": "PagBank Connect Webhook",
+      "name": "PagBank Connect Trigger",
       "webhookId": "799b3531-dd3f-4014-9f79-33cc8045b9b6"
     },
     {
@@ -41,7 +41,7 @@
   ],
   "pinData": {},
   "connections": {
-    "PagBank Connect Webhook": {
+    "PagBank Connect Trigger": {
       "main": [
         [
           {

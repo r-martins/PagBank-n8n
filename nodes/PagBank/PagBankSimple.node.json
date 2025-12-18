@@ -1,0 +1,23 @@
+{
+	"node": {
+		"version": 1,
+		"name": "pagBank",
+		"displayName": "PagBank",
+		"description": "Integration with PagBank for payment processing",
+		"defaults": {
+			"name": "PagBank"
+		},
+		"inputs": ["main"],
+		"outputs": ["main"],
+		"properties": [
+			{
+				"displayName": "Operation",
+				"name": "operation",
+				"type": "options",
+				"default": "createPaymentLink",
+				"description": "The operation to perform"
+			}
+		]
+	}
+}
+
