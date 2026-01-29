@@ -29,7 +29,7 @@
         },
         "notificationUrl": "=https://9b1d9ff42005.ngrok-free.app/webhook/799b3531-dd3f-4014-9f79-33cc8045b9b6/pagbank-webhook"
       },
-      "type": "CUSTOM.pagBank",
+      "type": "n8n-nodes-pagbank-connect.pagBank",
       "typeVersion": 1,
       "position": [
         224,
