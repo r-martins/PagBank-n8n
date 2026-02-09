@@ -27,7 +27,7 @@ export class PagBankConnect implements ICredentialType {
 				'Authorization': '=Bearer {{$credentials.connectKey}}',
 				'Platform': 'n8n',
 				'Platform-Version': '1.114.0',
-				'Module-Version': '2.0.1',
+				'Module-Version': '2.0.2',
 			},
 		},
 	};
@@ -39,7 +39,7 @@ export class PagBankConnect implements ICredentialType {
 			headers: {
 				'Platform': 'n8n',
 				'Platform-Version': '1.114.0',
-				'Module-Version': '2.0.1',
+				'Module-Version': '2.0.2',
 			},
 		},
 	};
