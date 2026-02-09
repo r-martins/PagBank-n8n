@@ -88,6 +88,23 @@ try {
     fs.copyFileSync('nodes/PagBank/PagBankSimple.node.json', 'dist/nodes/PagBank/PagBankSimple.node.json');
     console.log('✅ PagBankSimple.node.json copied');
   }
+
+  // Copy lib/pagbank (SDK) to dist so dist never has stale or console-containing builds
+  const libPagbank = 'lib/pagbank';
+  const distLibPagbank = 'dist/lib/pagbank';
+  if (fs.existsSync(libPagbank)) {
+    if (!fs.existsSync(distLibPagbank)) {
+      fs.mkdirSync(distLibPagbank, { recursive: true });
+    }
+    const libFiles = fs.readdirSync(libPagbank);
+    libFiles.forEach((file) => {
+      const src = path.join(libPagbank, file);
+      if (fs.statSync(src).isFile()) {
+        fs.copyFileSync(src, path.join(distLibPagbank, file));
+      }
+    });
+    console.log('✅ lib/pagbank (SDK) copied to dist');
+  }
   
   // Remove old webhook files if they exist
   const oldWebhookFiles = [
