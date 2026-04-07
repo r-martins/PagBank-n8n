@@ -69,7 +69,6 @@ export function getN8nPlatformVersionHeader(): string {
 	}
 	try {
 		// Only works when this package is loaded from the same Node process as n8n.
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const v = require('n8n/package.json')?.version as string | undefined;
 		if (typeof v === 'string' && v.length > 0) {
 			return v;
