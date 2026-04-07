@@ -7,8 +7,182 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { validateConnectKey, pagBankConnectRequest } from './PagBankUtils';
+import { validateConnectKey, pagBankConnectRequest, isSandboxConnectKey } from './PagBankUtils';
 import { encryptCard } from '../../lib/pagbank/PagBankEncryption';
+
+type SplitMethod = 'FIXED' | 'PERCENTAGE';
+
+function buildOrderSplitsPayload(
+	splitMethod: SplitMethod,
+	receiverRows: any[] | undefined,
+	orderTotalCents: number,
+	options: { includeLiable: boolean },
+): { method: SplitMethod; receivers: any[] } | undefined {
+	if (!receiverRows || !Array.isArray(receiverRows) || receiverRows.length === 0) {
+		return undefined;
+	}
+	if (receiverRows.length < 2) {
+		throw new Error('Payment split requires at least 2 receivers. Add another receiver or remove split receivers.');
+	}
+
+	const receivers: any[] = [];
+
+	for (const row of receiverRows) {
+		const accountId = (row.accountId || '').toString().trim();
+		if (!accountId) {
+			throw new Error('Each split receiver must have an Account ID.');
+		}
+
+		const amountVal = Number(row.amountValue);
+		if (!Number.isFinite(amountVal) || amountVal < 0) {
+			throw new Error('Each split receiver must have a valid amount/percentage value.');
+		}
+
+		const rec: any = {
+			account: { id: accountId },
+		};
+
+		if (splitMethod === 'FIXED') {
+			rec.amount = { value: Math.round(amountVal) };
+		} else {
+			rec.amount = { value: Math.round(amountVal) };
+		}
+
+		const reason = (row.reason || '').toString().trim();
+		if (reason) {
+			rec.reason = reason;
+		}
+
+		const receiverType = (row.receiverType || '').toString().trim();
+		if (receiverType === 'PRIMARY' || receiverType === 'SECONDARY') {
+			rec.type = receiverType;
+		}
+
+		const custodyApply = row.custodyApply === true || row.custodyApply === 'true';
+		const releaseScheduled = (row.custodyReleaseScheduled || '').toString().trim();
+		const configurations: any = {};
+
+		if (custodyApply || releaseScheduled) {
+			configurations.custody = { apply: custodyApply };
+			if (custodyApply && releaseScheduled) {
+				configurations.custody.release = { scheduled: releaseScheduled };
+			}
+		} else {
+			configurations.custody = { apply: false };
+		}
+
+		const chargebackRaw = row.chargebackPercentage;
+		if (
+			chargebackRaw !== undefined &&
+			chargebackRaw !== null &&
+			String(chargebackRaw).trim() !== ''
+		) {
+			const pct = Number(String(chargebackRaw).trim());
+			if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+				throw new Error('Chargeback percentage must be between 0 and 100.');
+			}
+			configurations.chargeback = {
+				charge_transfer: { percentage: Math.round(pct) },
+			};
+		}
+
+		if (options.includeLiable && (row.liable === true || row.liable === 'true')) {
+			configurations.liable = true;
+		}
+
+		if (Object.keys(configurations).length > 0) {
+			rec.configurations = configurations;
+		}
+
+		receivers.push(rec);
+	}
+
+	if (splitMethod === 'FIXED') {
+		const sum = receivers.reduce((acc, r) => acc + (r.amount?.value || 0), 0);
+		if (sum !== orderTotalCents) {
+			throw new Error(
+				`Split amounts (FIXED) must sum to the order total (${orderTotalCents} cents). Current sum: ${sum}.`,
+			);
+		}
+	} else {
+		const sum = receivers.reduce((acc, r) => acc + (r.amount?.value || 0), 0);
+		if (sum !== 100) {
+			throw new Error(
+				`Split percentages must sum to 100. Current sum: ${sum}.`,
+			);
+		}
+	}
+
+	return { method: splitMethod, receivers };
+}
+
+/** Public split resource on PagSeguro internal sandbox (no auth). */
+const INTERNAL_SANDBOX_SPLITS_BASE = 'https://internal.sandbox.api.pagseguro.com/splits';
+
+/**
+ * Returns canonical URL for unauthenticated GET on internal sandbox splits API.
+ * Tolerant to n8n expressions (=prefix), quotes, query/hash, and does not rely on URL()
+ * alone (avoids failures when the string is almost-but-not-quite a valid URL).
+ */
+function tryInternalSandboxSplitPublicUrl(raw: string): string | null {
+	let s = String(raw ?? '').trim();
+	if (!s) {
+		return null;
+	}
+	if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+		s = s.slice(1, -1).trim();
+	}
+	// Expression mode in n8n may store leading =
+	if (s.startsWith('=')) {
+		s = s.slice(1).trim();
+	}
+	// Strip BOM / zero-width (copy-paste from some UIs)
+	s = s.replace(/^\uFEFF/, '').replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+	const hostOk = /internal\.sandbox\.api\.pagseguro\.com/i.test(s);
+	const idMatch = s.match(/\/splits\/(SPLI_[0-9A-F-]+)/i);
+	if (hostOk && idMatch) {
+		return `${INTERNAL_SANDBOX_SPLITS_BASE}/${idMatch[1]}`;
+	}
+
+	try {
+		const u = new URL(s);
+		if (u.hostname.toLowerCase() !== 'internal.sandbox.api.pagseguro.com') {
+			return null;
+		}
+		const m = u.pathname.match(/^\/splits\/(SPLI_[0-9A-F-]+)\/?$/i);
+		if (!m) {
+			return null;
+		}
+		u.hash = '';
+		u.search = '';
+		u.pathname = `/splits/${m[1]}`;
+		return u.href;
+	} catch {
+		return null;
+	}
+}
+
+/** Raw SPLI_… or href from order links; used with Connect GET /connect/ws/splits/:id */
+function normalizeSplitId(raw: string): string {
+	let s = (raw || '').trim();
+	if (!s) {
+		return '';
+	}
+	if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+		s = s.slice(1, -1).trim();
+	}
+	const pathOnly = s.split('#')[0].split('?')[0].replace(/\/+$/, '');
+	const fromUrl = pathOnly.match(/\/splits\/(SPLI_[A-F0-9-]+)/i);
+	if (fromUrl) {
+		return fromUrl[1];
+	}
+	const bare = pathOnly.match(/^(SPLI_[A-F0-9-]+)$/i);
+	if (bare) {
+		return bare[1];
+	}
+	return pathOnly.trim();
+}
 
 export class PagBankSimple implements INodeType {
 	description: INodeTypeDescription = {
@@ -66,6 +240,19 @@ export class PagBankSimple implements INodeType {
 					value: 'validateConnectKey',
 					description: 'Retrieve Connect Key information',
 					action: 'Get Connect Key',
+				},
+				{
+					name: 'Get Split Details',
+					value: 'getSplitDetails',
+					description:
+						'Sandbox Connect key → public GET on internal.sandbox.api.pagseguro.com; production key → Connect API. Full sandbox SPLIT URL also works',
+					action: 'Get split details',
+				},
+				{
+					name: 'Release Split Custody',
+					value: 'releaseSplitCustody',
+					description: 'Release custody for one or more receivers before the scheduled date',
+					action: 'Release split custody',
 				},
 				],
 				default: 'createPaymentLink',
@@ -197,12 +384,133 @@ export class PagBankSimple implements INodeType {
 								description: 'Item quantity',
 							},
 							{
-								displayName: 'Value (in cents)',
+								displayName: 'Amount (in cents)',
 								name: 'unit_amount',
 								type: 'number',
 								default: 0,
 								required: true,
 								description: 'Unit value in cents (e.g.: R$ 10.00 = 1000)',
+							},
+						],
+					},
+				],
+			},
+			{
+				displayName: 'Split Method (optional)',
+				name: 'splitMethod',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Fixed Amount (order total in cents, split across receivers)',
+						value: 'FIXED',
+					},
+					{
+						name: 'Percentage (each receiver gets a %; must sum to 100)',
+						value: 'PERCENTAGE',
+					},
+				],
+				default: 'FIXED',
+				description:
+					'How to divide the payment between receivers. FIXED uses amounts in cents; PERCENTAGE uses integer percent per receiver.',
+				displayOptions: {
+					show: {
+						operation: ['createPixOrder', 'createCreditCardCharge'],
+					},
+				},
+			},
+			{
+				displayName: 'Split Receivers (optional)',
+				name: 'splitReceivers',
+				type: 'fixedCollection',
+				default: {},
+				placeholder: 'Add Receiver',
+				description:
+					'Optional. Add 2+ receivers to split the payment (PagBank account IDs). Same pattern as Order Items. Ignored if empty.',
+				typeOptions: {
+					multipleValues: true,
+				},
+				displayOptions: {
+					show: {
+						operation: ['createPixOrder', 'createCreditCardCharge'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Receiver',
+						name: 'splitReceiverProperties',
+						values: [
+							{
+								displayName: 'Account ID',
+								name: 'accountId',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. ACCO_XXXX-XXXX-...',
+								description: 'PagBank account ID of the receiver',
+							},
+							{
+								displayName: 'Amount or Percentage',
+								name: 'amountValue',
+								type: 'number',
+								default: 0,
+								required: true,
+								description:
+									'For FIXED: value in cents (must sum to order total). For PERCENTAGE: integer percent (must sum to 100).',
+							},
+							{
+								displayName: 'Reason',
+								name: 'reason',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. Marketplace commission',
+								description: 'Optional description shown in the split',
+							},
+							{
+								displayName: 'Receiver Type',
+								name: 'receiverType',
+								type: 'options',
+								options: [
+									{ name: '(unspecified)', value: '' },
+									{ name: 'Primary', value: 'PRIMARY' },
+									{ name: 'Secondary', value: 'SECONDARY' },
+								],
+								default: '',
+								description: 'Optional. Primary vs secondary seller role',
+							},
+							{
+								displayName: 'Custody Apply',
+								name: 'custodyApply',
+								type: 'boolean',
+								default: false,
+								description:
+									'If true, custody rules apply to this receiver (see release date below)',
+							},
+							{
+								displayName: 'Custody Release (ISO 8601)',
+								name: 'custodyReleaseScheduled',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. 2026-10-30T07:22:37+00:00',
+								description:
+									'When money is released to this receiver if custody applies (future date, max 365 days from default policy)',
+							},
+							{
+								displayName: 'Chargeback %',
+								name: 'chargebackPercentage',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. 0 or 100',
+								description:
+									'Optional. 0–100 per receiver (chargeback allocation). Leave empty to omit. Only one receiver may be 100.',
+							},
+							{
+								displayName: 'Liable (MCC)',
+								name: 'liable',
+								type: 'boolean',
+								default: false,
+								description:
+									'Credit card only: use secondary seller MCC for compliance. Ignored for PIX.',
 							},
 						],
 					},
@@ -313,6 +621,55 @@ export class PagBankSimple implements INodeType {
 				},
 			},
 			{
+				displayName: 'Split ID',
+				name: 'splitId',
+				type: 'string',
+				default: '',
+				required: true,
+				placeholder: 'e.g. SPLI_03FF3600-39BB-4873-B31A-0C9EF5912D59 or paste SPLIT href',
+				description:
+					'Get Split Details: with sandbox Connect key, SPLI_ id uses unauthenticated GET on internal.sandbox; with production key, Connect API (ws.pbintegracoes.com). Optional: paste full internal sandbox SPLIT URL. Release Custody: always Connect API.',
+				displayOptions: {
+					show: {
+						operation: ['getSplitDetails', 'releaseSplitCustody'],
+					},
+				},
+			},
+			{
+				displayName: 'Custody Release — Account IDs',
+				name: 'custodyReleaseAccounts',
+				type: 'fixedCollection',
+				default: {},
+				placeholder: 'Add account',
+				description:
+					'Sellers (PagBank account ids) to release custody for before the scheduled date',
+				typeOptions: {
+					multipleValues: true,
+				},
+				displayOptions: {
+					show: {
+						operation: ['releaseSplitCustody'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Account',
+						name: 'accountProperties',
+						values: [
+							{
+								displayName: 'Account ID',
+								name: 'accountId',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'e.g. ACCO_F608816F-8C91-4DAF-B3B8-B8FC251EDCE7',
+								description: 'PagBank account id of the receiver',
+							},
+						],
+					},
+				],
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'additionalFields',
 				type: 'collection',
@@ -320,7 +677,15 @@ export class PagBankSimple implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
-						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge', 'getOrderStatus', 'validateConnectKey'],
+						operation: [
+							'createPaymentLink',
+							'createPixOrder',
+							'createCreditCardCharge',
+							'getOrderStatus',
+							'validateConnectKey',
+							'getSplitDetails',
+							'releaseSplitCustody',
+						],
 					},
 				},
 				options: [
@@ -396,6 +761,10 @@ export class PagBankSimple implements INodeType {
 					responseData = await nodeInstance.getOrderStatus.call(this, i);
 				} else if (operation === 'validateConnectKey') {
 					responseData = await nodeInstance.validateConnectKey.call(this, i);
+				} else if (operation === 'getSplitDetails') {
+					responseData = await nodeInstance.getSplitDetails.call(this, i);
+				} else if (operation === 'releaseSplitCustody') {
+					responseData = await nodeInstance.releaseSplitCustody.call(this, i);
 				} else {
 					throw new NodeOperationError(this.getNode(), `Unsupported operation: ${operation}`);
 				}
@@ -518,6 +887,24 @@ export class PagBankSimple implements INodeType {
 			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
 		}
 
+		const orderTotalCents = items.reduce(
+			(total: number, item: any) => total + item.unit_amount * item.quantity,
+			0,
+		);
+
+		const splitMethod = this.getNodeParameter('splitMethod', itemIndex) as SplitMethod;
+		const splitReceiversData = this.getNodeParameter('splitReceivers', itemIndex) as any;
+		const splitRows = splitReceiversData?.splitReceiverProperties as any[] | undefined;
+
+		let splitsPayload: ReturnType<typeof buildOrderSplitsPayload>;
+		try {
+			splitsPayload = buildOrderSplitsPayload(splitMethod, splitRows, orderTotalCents, {
+				includeLiable: false,
+			});
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message || 'Invalid split configuration');
+		}
+
 		const body: any = {
 			reference_id: referenceId || `PIX-${Date.now()}`,
 			customer: {
@@ -534,12 +921,16 @@ export class PagBankSimple implements INodeType {
 			qr_codes: [
 				{
 					amount: {
-						value: items.reduce((total: number, item: any) => total + (item.unit_amount * item.quantity), 0),
+						value: orderTotalCents,
 						currency: 'BRL',
 					},
 				},
 			],
 		};
+
+		if (splitsPayload) {
+			body.qr_codes[0].splits = splitsPayload;
+		}
 
 		// Add reference_id only if provided
 		if (referenceId && referenceId.trim()) {
@@ -575,6 +966,102 @@ export class PagBankSimple implements INodeType {
 		return response;
 	}
 
+	private async getSplitDetails(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const raw = this.getNodeParameter('splitId', itemIndex) as string;
+
+		const sandboxPublicUrl = tryInternalSandboxSplitPublicUrl(raw);
+		if (sandboxPublicUrl) {
+			try {
+				return await this.helpers.httpRequest({
+					method: 'GET',
+					url: sandboxPublicUrl,
+					json: true,
+					headers: {
+						Accept: 'application/json',
+					},
+				});
+			} catch (error: any) {
+				const msg = error?.message || 'Request failed';
+				throw new NodeOperationError(this.getNode(), `Sandbox split GET failed: ${msg}`);
+			}
+		}
+
+		const credentials = await this.getCredentials('pagBankConnect');
+		if (!credentials) {
+			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
+		}
+		const connectKey = (credentials as any).connectKey as string;
+		if (!connectKey) {
+			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
+		}
+
+		const splitId = normalizeSplitId(raw);
+		if (!splitId || !/^SPLI_[A-F0-9-]+$/i.test(splitId)) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Split ID is required (expected SPLI_… or a SPLIT href containing /splits/SPLI_…)',
+			);
+		}
+
+		if (isSandboxConnectKey(connectKey)) {
+			const url = `${INTERNAL_SANDBOX_SPLITS_BASE}/${encodeURIComponent(splitId)}`;
+			try {
+				return await this.helpers.httpRequest({
+					method: 'GET',
+					url,
+					json: true,
+					headers: {
+						Accept: 'application/json',
+					},
+				});
+			} catch (error: any) {
+				const msg = error?.message || 'Request failed';
+				throw new NodeOperationError(this.getNode(), `Sandbox split GET failed: ${msg}`);
+			}
+		}
+
+		const encoded = encodeURIComponent(splitId);
+		return await pagBankConnectRequest.call(this, 'GET', `/connect/ws/splits/${encoded}`);
+	}
+
+	private async releaseSplitCustody(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const raw = this.getNodeParameter('splitId', itemIndex) as string;
+		const splitId = normalizeSplitId(raw);
+		if (!splitId || !/^SPLI_[A-F0-9-]+$/i.test(splitId)) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Split ID is required (expected SPLI_… or a SPLIT href containing /splits/SPLI_…)',
+			);
+		}
+
+		const accountsData = this.getNodeParameter('custodyReleaseAccounts', itemIndex) as any;
+		const rows = accountsData?.accountProperties as any[] | undefined;
+		if (!rows || !Array.isArray(rows) || rows.length === 0) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Add at least one account under Custody Release — Account IDs',
+			);
+		}
+
+		const receivers: { account: { id: string } }[] = [];
+		for (const row of rows) {
+			const id = (row.accountId || '').toString().trim();
+			if (!id) {
+				throw new NodeOperationError(this.getNode(), 'Each account entry must have an Account ID');
+			}
+			receivers.push({ account: { id } });
+		}
+
+		const body = { receivers };
+		const encoded = encodeURIComponent(splitId);
+		return await pagBankConnectRequest.call(
+			this,
+			'POST',
+			`/connect/ws/splits/${encoded}/custody/release`,
+			body,
+		);
+	}
+
 	private async validateConnectKey(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const credentials = await this.getCredentials('pagBankConnect');
 		if (!credentials) {
@@ -587,7 +1074,7 @@ export class PagBankSimple implements INodeType {
 		return {
 			...validation,
 			connectKey: connectKey.substring(0, 10) + '...', // Mask the key
-			environment: connectKey.startsWith('CONSANDBOX') ? 'Sandbox' : 'Produção',
+			environment: isSandboxConnectKey(connectKey) ? 'Sandbox' : 'Produção',
 			validatedAt: new Date().toISOString(),
 		};
 	}
@@ -635,6 +1122,24 @@ export class PagBankSimple implements INodeType {
 		// Encrypt card data using external JavaScript
 		const cardToken = await nodeInstance.encryptCardData.call(this, cardData, publicKey);
 
+		const orderTotalCents = items.reduce(
+			(total: number, item: any) => total + item.unit_amount * item.quantity,
+			0,
+		);
+
+		const splitMethod = this.getNodeParameter('splitMethod', itemIndex) as SplitMethod;
+		const splitReceiversData = this.getNodeParameter('splitReceivers', itemIndex) as any;
+		const splitRows = splitReceiversData?.splitReceiverProperties as any[] | undefined;
+
+		let splitsPayload: ReturnType<typeof buildOrderSplitsPayload>;
+		try {
+			splitsPayload = buildOrderSplitsPayload(splitMethod, splitRows, orderTotalCents, {
+				includeLiable: true,
+			});
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message || 'Invalid split configuration');
+		}
+
 		const body: any = {
 			customer: {
 				name: customerName,
@@ -651,7 +1156,7 @@ export class PagBankSimple implements INodeType {
 				{
 					description: `Pagamento via cartão - ${items.map((item: any) => item.name).join(', ')}`,
 					amount: {
-						value: items.reduce((total: number, item: any) => total + (item.unit_amount * item.quantity), 0),
+						value: orderTotalCents,
 						currency: 'BRL',
 					},
 					payment_method: {
@@ -667,6 +1172,10 @@ export class PagBankSimple implements INodeType {
 				},
 			],
 		};
+
+		if (splitsPayload) {
+			body.charges[0].splits = splitsPayload;
+		}
 
 		// Add reference_id only if provided
 		if (referenceId && referenceId.trim()) {

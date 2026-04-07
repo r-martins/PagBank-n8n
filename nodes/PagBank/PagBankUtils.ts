@@ -63,6 +63,11 @@ export interface PagBankConnectRequestOptions {
 	headers?: any;
 }
 
+/** Sandbox Connect keys use the CONSANDBOX prefix (PagBank / pbintegracoes). */
+export function isSandboxConnectKey(connectKey: string | undefined | null): boolean {
+	return typeof connectKey === 'string' && connectKey.startsWith('CONSANDBOX');
+}
+
 export async function pagBankConnectRequest(
 	this: IExecuteFunctions,
 	method: string,
@@ -78,7 +83,7 @@ export async function pagBankConnectRequest(
 
 	const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
 	const connectKey = (credentials as any).connectKey;
-	const isSandbox = connectKey && connectKey.startsWith('CONSANDBOX');
+	const isSandbox = isSandboxConnectKey(connectKey);
 	
 	let url = `${baseURL}${endpoint}`;
 	if (isSandbox) {
