@@ -13,6 +13,7 @@ n8n integration with PagBank Connect for Brazilian payment processing.
 - ✅ **PIX** - Instant payments with QR Code
 - ✅ **Credit/Debit Card** - Secure card processing
 - ✅ **Payment Links** - Custom checkout
+- ✅ **Payment split** - Split PIX and card orders between multiple PagBank accounts (FIXED or PERCENTAGE), plus split details and custody release
 - ✅ **Recurring Subscriptions** - Recurring payments (coming soon)
 - ✅ **Webhooks** - Real-time notifications
 - ✅ **Sandbox Environment** - Safe testing
@@ -26,6 +27,14 @@ npm install n8n-nodes-pagbank-connect
 ```
 
 ## Configuration
+
+### HTTP headers (Platform-Version)
+
+API calls send `Platform-Version` (host n8n) and `Module-Version` (this package). The server n8n version is detected when possible via `n8n/package.json` in the running process. You can force a value:
+
+- **`PAGBANK_PLATFORM_VERSION`** — always wins (e.g. Docker / systemd `Environment=PAGBANK_PLATFORM_VERSION=1.114.0`)
+- **`N8N_VERSION`** or **`N8N_RELEASE_VERSION`** — used if set
+- Otherwise falls back to **`unknown`** (e.g. running tests outside n8n)
 
 ### 1. Get Credentials
 
@@ -42,10 +51,15 @@ If you need a Test Connect Key, [click here](https://pbintegracoes.com/connect/s
 
 ### PagBank (Main)
 - **Create Payment Link** - Generates checkout links for customers to pay on PagBank
-- **Create PIX Order** - Creates PIX payments
-- **Create Credit Card Charge** - Processes a payment with the provided credit card data
+- **Create PIX Order** - Creates PIX payments (optional **payment split** on the QR code)
+- **Create Credit Card Charge** - Processes a payment with the provided credit card data (optional **payment split** on the charge)
 - **Check order status** - Queries the status of an ORDER with PagBank (must have been generated with this connect key)
+- **Get Split Details** - Reads a split by `SPLI_…` id or SPLIT `href` from the order. Sandbox: public API on `internal.sandbox.api.pagseguro.com` when using a sandbox Connect key or pasting that URL; production: authenticated Connect API.
+- **Release Split Custody** - Releases held funds for one or more receiver **account ids** before the scheduled custody date (Connect API).
 - **Validate Connect Key** - Validates the Connect Key configured in your credentials
+
+### Payment split (marketplace / multi-seller)
+Use **Split Method** and **Split Receivers** on **Create PIX Order** or **Create Credit Card Charge** to divide the payment between accounts (PagBank `ACCO_…` ids). **FIXED** requires amounts in **cents** that sum to the order total; **PERCENTAGE** requires integer percents summing to **100**. You can set custody, chargeback allocation, and (for cards) **liable**. After payment, the order `links` may include `rel: SPLIT` — use **Get Split Details** to inspect the split and **Release Split Custody** when eligible. See [PagBank split documentation](https://developer.pagbank.com.br/reference/divisao-de-pagamento) and [PagBank Connect n8n docs]().
 
 ### PagBank Connect Trigger
 - **Payment Trigger** - Receives notifications. You can filter notifications by payment status, payment methods or denial reason.

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-04-07
+
+### Added
+- **Payment split (Orders API)** — On **Create PIX Order** and **Create Credit Card Charge**, optional **Split Method** (FIXED amounts in cents or PERCENTAGE summing to 100) and **Split Receivers** (multi-line, similar to order items) with account id, custody, chargeback %, liable (card), etc.
+- **Get Split Details** — Fetch split by `SPLI_…` or SPLIT href. Sandbox Connect key or internal sandbox URL uses public GET on `internal.sandbox.api.pagseguro.com`; production uses authenticated Connect (`/connect/ws/splits/:id`).
+- **Release Split Custody** — `POST` custody release for selected receiver account ids before the scheduled date.
+
+### Changed
+- **API headers** — `Module-Version` is read from this package’s `package.json`. `Platform-Version` is resolved at runtime (`require('n8n/package.json')`, or `N8N_VERSION` / `N8N_RELEASE_VERSION`, or `PAGBANK_PLATFORM_VERSION`); falls back to `unknown` outside n8n (see README).
+
+---
+
 ## [1.3.3] - 2024-10-20
 
 ### 🔧 Marketplace Compliance

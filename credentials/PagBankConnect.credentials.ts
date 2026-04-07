@@ -5,6 +5,11 @@ import {
 	INodeProperties,
 } from 'n8n-workflow';
 
+import { getN8nPlatformVersionHeader, getPagBankModuleVersion } from '../nodes/PagBank/PagBankUtils';
+
+const platformVersionHeader = getN8nPlatformVersionHeader();
+const moduleVersionHeader = getPagBankModuleVersion();
+
 export class PagBankConnect implements ICredentialType {
 	name = 'pagBankConnect';
 	displayName = 'PagBank Connect';
@@ -26,8 +31,8 @@ export class PagBankConnect implements ICredentialType {
 			headers: {
 				'Authorization': '=Bearer {{$credentials.connectKey}}',
 				'Platform': 'n8n',
-				'Platform-Version': '1.114.0',
-				'Module-Version': '2.0.2',
+				'Platform-Version': platformVersionHeader,
+				'Module-Version': moduleVersionHeader,
 			},
 		},
 	};
@@ -38,8 +43,8 @@ export class PagBankConnect implements ICredentialType {
 			method: 'GET',
 			headers: {
 				'Platform': 'n8n',
-				'Platform-Version': '1.114.0',
-				'Module-Version': '2.0.2',
+				'Platform-Version': platformVersionHeader,
+				'Module-Version': moduleVersionHeader,
 			},
 		},
 	};
