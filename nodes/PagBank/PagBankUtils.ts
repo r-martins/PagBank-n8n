@@ -1,9 +1,84 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
 	INodeProperties,
 	NodeOperationError,
 } from 'n8n-workflow';
+
+let cachedPagBankModuleVersion: string | undefined;
+
+/**
+ * Semver of this community package for the `Module-Version` header — always from the root
+ * `package.json` of `n8n-nodes-pagbank-connect` (walks up from `dist/…` until it finds it).
+ */
+export function getPagBankModuleVersion(): string {
+	if (cachedPagBankModuleVersion !== undefined) {
+		return cachedPagBankModuleVersion;
+	}
+	let dir: string = __dirname;
+	for (let i = 0; i < 8; i++) {
+		const pkgPath = path.join(dir, 'package.json');
+		try {
+			if (fs.existsSync(pkgPath)) {
+				const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as {
+					name?: string;
+					version?: string;
+				};
+				if (
+					pkg.name === 'n8n-nodes-pagbank-connect' &&
+					typeof pkg.version === 'string' &&
+					pkg.version.length > 0
+				) {
+					cachedPagBankModuleVersion = pkg.version;
+					return cachedPagBankModuleVersion;
+				}
+			}
+		} catch {
+			/* try parent directory */
+		}
+		const parent = path.dirname(dir);
+		if (parent === dir) {
+			break;
+		}
+		dir = parent;
+	}
+	cachedPagBankModuleVersion = '0.0.0';
+	return cachedPagBankModuleVersion;
+}
+
+/**
+ * Host n8n semver for the `Platform-Version` header.
+ * n8n does not expose this on IExecuteFunctions; we resolve it in this order:
+ * 1. `PAGBANK_PLATFORM_VERSION` (manual override)
+ * 2. `N8N_VERSION` / `N8N_RELEASE_VERSION` if set in the environment
+ * 3. `require('n8n/package.json').version` when the node runs inside the n8n process
+ * 4. `'unknown'` (e.g. tests outside n8n — set an env var if your gateway needs a value)
+ */
+export function getN8nPlatformVersionHeader(): string {
+	const manual = process.env.PAGBANK_PLATFORM_VERSION?.trim();
+	if (manual) {
+		return manual;
+	}
+	for (const key of ['N8N_VERSION', 'N8N_RELEASE_VERSION'] as const) {
+		const v = process.env[key]?.trim();
+		if (v) {
+			return v;
+		}
+	}
+	try {
+		// Only works when this package is loaded from the same Node process as n8n.
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const v = require('n8n/package.json')?.version as string | undefined;
+		if (typeof v === 'string' && v.length > 0) {
+			return v;
+		}
+	} catch {
+		/* n8n not resolvable */
+	}
+	return 'unknown';
+}
 
 // Helper function to extract PagBank error messages
 function extractPagBankErrorMessage(error: any): { message: string; description: string } {
@@ -96,8 +171,8 @@ export async function pagBankConnectRequest(
 		headers: {
 			'Authorization': `Bearer ${connectKey}`,
 			'Platform': 'n8n',
-			'Platform-Version': '1.114.0',
-			'Module-Version': '2.0.2',
+			'Platform-Version': getN8nPlatformVersionHeader(),
+			'Module-Version': getPagBankModuleVersion(),
 			'Content-Type': 'application/json',
 		},
 		json: true,
