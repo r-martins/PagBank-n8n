@@ -1,5 +1,7 @@
 # Publishes to npm via Trusted Publisher (OIDC) — no NPM_TOKEN.
-# Runs when a version tag is pushed (e.g. 2.1.2 or v2.1.2). Configure workflow filename + repo on npmjs.com → Trusted publishing.
+# - Tag push (e.g. 2.1.2 or v2.1.2): publish job → npm publish.
+# - workflow_dispatch ("Run workflow"): verify job only → build + lint (no new version / no npm).
+# To retry a failed publish for the same tag: Actions → failed run → Re-run jobs (no new tag).
 # Requires Node ≥ 22.14 and npm ≥ 11.5.1 (https://docs.npmjs.com/trusted-publishers).
 # Provenance is generated automatically when publishing from a public repo via trusted publishing.
 name: Publish npm
@@ -10,6 +12,7 @@ on:
       - 'v*'
       # Bare semver tags (e.g. 2.1.2) — three dot-separated segments
       - '*.*.*'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,7 +20,10 @@ permissions:
 
 jobs:
   publish:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    # Must match npm → Package → Settings → Trusted publishing → Environment name (case-sensitive).
+    environment: Production
     steps:
       - uses: actions/checkout@v4
 
@@ -34,3 +40,24 @@ jobs:
       - run: npm run build
 
       - run: npm publish --provenance --access public
+
+  # Manual smoke test: Actions → Publish npm → Run workflow (no tag, no npm publish).
+  verify:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@^11.5.1
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm run lint -s
