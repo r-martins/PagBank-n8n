@@ -7,7 +7,12 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { validateConnectKey, pagBankConnectRequest, isSandboxConnectKey } from './PagBankUtils';
+import {
+	validateConnectKey,
+	pagBankConnectRequest,
+	isSandboxConnectKey,
+	pagBankInternalSandboxSplitGet,
+} from './PagBankUtils';
 import { encryptCard } from '../../lib/pagbank/PagBankEncryption';
 
 type SplitMethod = 'FIXED' | 'PERCENTAGE';
@@ -182,6 +187,53 @@ function normalizeSplitId(raw: string): string {
 		return bare[1];
 	}
 	return pathOnly.trim();
+}
+
+/** Resolved target for Get Split Details — routing uses credentials; HTTP runs separately (n8n ESLint). */
+type SplitDetailsRoute =
+	| { readonly mode: 'internalUnauth'; readonly url: string }
+	| { readonly mode: 'connect'; readonly splitId: string };
+
+/**
+ * Credential / routing only — must not call `this.helpers.httpRequest` here
+ * (@n8n/community-nodes/no-http-request-with-manual-auth). Invoked with execute `this`.
+ */
+async function resolveSplitDetailsRoute(
+	this: IExecuteFunctions,
+	itemIndex: number,
+): Promise<SplitDetailsRoute> {
+	const raw = this.getNodeParameter('splitId', itemIndex) as string;
+
+	const sandboxPublicUrl = tryInternalSandboxSplitPublicUrl(raw);
+	if (sandboxPublicUrl) {
+		return { mode: 'internalUnauth', url: sandboxPublicUrl };
+	}
+
+	const credentials = await this.getCredentials('pagBankConnect');
+	if (!credentials) {
+		throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
+	}
+	const connectKey = (credentials as any).connectKey as string;
+	if (!connectKey) {
+		throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
+	}
+
+	const splitId = normalizeSplitId(raw);
+	if (!splitId || !/^SPLI_[A-F0-9-]+$/i.test(splitId)) {
+		throw new NodeOperationError(
+			this.getNode(),
+			'Split ID is required (expected SPLI_… or a SPLIT href containing /splits/SPLI_…)',
+		);
+	}
+
+	if (isSandboxConnectKey(connectKey)) {
+		return {
+			mode: 'internalUnauth',
+			url: `${INTERNAL_SANDBOX_SPLITS_BASE}/${encodeURIComponent(splitId)}`,
+		};
+	}
+
+	return { mode: 'connect', splitId };
 }
 
 export class PagBankSimple implements INodeType {
@@ -877,16 +929,6 @@ export class PagBankSimple implements INodeType {
 		
 		const notificationUrl = additionalFields?.notificationUrl as string;
 
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
-		}
-		
-		const connectKey = (credentials as any).connectKey;
-		if (!connectKey) {
-			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
-		}
-
 		const orderTotalCents = items.reduce(
 			(total: number, item: any) => total + item.unit_amount * item.quantity,
 			0,
@@ -952,75 +994,23 @@ export class PagBankSimple implements INodeType {
 	private async getOrderStatus(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const orderId = this.getNodeParameter('orderId', itemIndex) as string;
 
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
-		}
-		
-		const connectKey = (credentials as any).connectKey;
-		if (!connectKey) {
-			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
-		}
-
 		const response = await pagBankConnectRequest.call(this, 'GET', `/connect/ws/orders/${orderId}`);
 		return response;
 	}
 
 	private async getSplitDetails(this: IExecuteFunctions, itemIndex: number): Promise<any> {
-		const raw = this.getNodeParameter('splitId', itemIndex) as string;
+		const resolved = await resolveSplitDetailsRoute.call(this, itemIndex);
 
-		const sandboxPublicUrl = tryInternalSandboxSplitPublicUrl(raw);
-		if (sandboxPublicUrl) {
+		if (resolved.mode === 'internalUnauth') {
 			try {
-				return await this.helpers.httpRequest({
-					method: 'GET',
-					url: sandboxPublicUrl,
-					json: true,
-					headers: {
-						Accept: 'application/json',
-					},
-				});
+				return await pagBankInternalSandboxSplitGet.call(this, resolved.url);
 			} catch (error: any) {
 				const msg = error?.message || 'Request failed';
 				throw new NodeOperationError(this.getNode(), `Sandbox split GET failed: ${msg}`);
 			}
 		}
 
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
-		}
-		const connectKey = (credentials as any).connectKey as string;
-		if (!connectKey) {
-			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
-		}
-
-		const splitId = normalizeSplitId(raw);
-		if (!splitId || !/^SPLI_[A-F0-9-]+$/i.test(splitId)) {
-			throw new NodeOperationError(
-				this.getNode(),
-				'Split ID is required (expected SPLI_… or a SPLIT href containing /splits/SPLI_…)',
-			);
-		}
-
-		if (isSandboxConnectKey(connectKey)) {
-			const url = `${INTERNAL_SANDBOX_SPLITS_BASE}/${encodeURIComponent(splitId)}`;
-			try {
-				return await this.helpers.httpRequest({
-					method: 'GET',
-					url,
-					json: true,
-					headers: {
-						Accept: 'application/json',
-					},
-				});
-			} catch (error: any) {
-				const msg = error?.message || 'Request failed';
-				throw new NodeOperationError(this.getNode(), `Sandbox split GET failed: ${msg}`);
-			}
-		}
-
-		const encoded = encodeURIComponent(splitId);
+		const encoded = encodeURIComponent(resolved.splitId);
 		return await pagBankConnectRequest.call(this, 'GET', `/connect/ws/splits/${encoded}`);
 	}
 
@@ -1105,16 +1095,6 @@ export class PagBankSimple implements INodeType {
 		const installments = additionalFields?.installments as number || 1;
 		const softDescriptor = additionalFields?.softDescriptor as string;
 
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
-		}
-		
-		const connectKey = (credentials as any).connectKey;
-		if (!connectKey) {
-			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
-		}
-
 		// Get encryption public key
 		const nodeInstance = new PagBankSimple();
 		const publicKey = await nodeInstance.getEncryptionPublicKey.call(this);
@@ -1195,16 +1175,6 @@ export class PagBankSimple implements INodeType {
 	}
 
 	private async getEncryptionPublicKey(this: IExecuteFunctions): Promise<string> {
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
-		}
-		
-		const connectKey = (credentials as any).connectKey;
-		if (!connectKey) {
-			throw new NodeOperationError(this.getNode(), 'Connect Key not found in credentials');
-		}
-
 		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/public-keys', {
 			type: 'card',
 		});

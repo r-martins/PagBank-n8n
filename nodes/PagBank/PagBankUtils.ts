@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -7,76 +5,22 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-let cachedPagBankModuleVersion: string | undefined;
-
 /**
- * Semver of this community package for the `Module-Version` header — always from the root
- * `package.json` of `n8n-nodes-pagbank-connect` (walks up from `dist/…` until it finds it).
+ * Internal sandbox split resource (no Connect auth). Kept in Utils so call sites
+ * do not pair `getCredentials` with `httpRequest` (n8n community-package scan).
  */
-export function getPagBankModuleVersion(): string {
-	if (cachedPagBankModuleVersion !== undefined) {
-		return cachedPagBankModuleVersion;
-	}
-	let dir: string = __dirname;
-	for (let i = 0; i < 8; i++) {
-		const pkgPath = path.join(dir, 'package.json');
-		try {
-			if (fs.existsSync(pkgPath)) {
-				const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as {
-					name?: string;
-					version?: string;
-				};
-				if (
-					pkg.name === 'n8n-nodes-pagbank-connect' &&
-					typeof pkg.version === 'string' &&
-					pkg.version.length > 0
-				) {
-					cachedPagBankModuleVersion = pkg.version;
-					return cachedPagBankModuleVersion;
-				}
-			}
-		} catch {
-			/* try parent directory */
-		}
-		const parent = path.dirname(dir);
-		if (parent === dir) {
-			break;
-		}
-		dir = parent;
-	}
-	cachedPagBankModuleVersion = '0.0.0';
-	return cachedPagBankModuleVersion;
-}
-
-/**
- * Host n8n semver for the `Platform-Version` header.
- * n8n does not expose this on IExecuteFunctions; we resolve it in this order:
- * 1. `PAGBANK_PLATFORM_VERSION` (manual override)
- * 2. `N8N_VERSION` / `N8N_RELEASE_VERSION` if set in the environment
- * 3. `require('n8n/package.json').version` when the node runs inside the n8n process
- * 4. `'unknown'` (e.g. tests outside n8n — set an env var if your gateway needs a value)
- */
-export function getN8nPlatformVersionHeader(): string {
-	const manual = process.env.PAGBANK_PLATFORM_VERSION?.trim();
-	if (manual) {
-		return manual;
-	}
-	for (const key of ['N8N_VERSION', 'N8N_RELEASE_VERSION'] as const) {
-		const v = process.env[key]?.trim();
-		if (v) {
-			return v;
-		}
-	}
-	try {
-		// Only works when this package is loaded from the same Node process as n8n.
-		const v = require('n8n/package.json')?.version as string | undefined;
-		if (typeof v === 'string' && v.length > 0) {
-			return v;
-		}
-	} catch {
-		/* n8n not resolvable */
-	}
-	return 'unknown';
+export async function pagBankInternalSandboxSplitGet(
+	this: IExecuteFunctions,
+	url: string,
+): Promise<any> {
+	return await this.helpers.httpRequest({
+		method: 'GET',
+		url,
+		json: true,
+		headers: {
+			Accept: 'application/json',
+		},
+	});
 }
 
 // Helper function to extract PagBank error messages
@@ -142,15 +86,13 @@ export function isSandboxConnectKey(connectKey: string | undefined | null): bool
 	return typeof connectKey === 'string' && connectKey.startsWith('CONSANDBOX');
 }
 
-export async function pagBankConnectRequest(
+/** Credential read + URL only (no HTTP) — keeps @n8n/community-nodes/no-http-request-with-manual-auth satisfied. */
+async function pagBankResolveConnectRequestUrl(
 	this: IExecuteFunctions,
-	method: string,
 	endpoint: string,
-	body?: any,
-	qs?: any,
-): Promise<any> {
+): Promise<{ url: string }> {
 	const credentials = await this.getCredentials('pagBankConnect');
-	
+
 	if (!credentials) {
 		throw new NodeOperationError(this.getNode(), 'PagBank Connect credentials not found');
 	}
@@ -158,20 +100,28 @@ export async function pagBankConnectRequest(
 	const baseURL = 'https://ws.pbintegracoes.com/pspro/v7';
 	const connectKey = (credentials as any).connectKey;
 	const isSandbox = isSandboxConnectKey(connectKey);
-	
+
 	let url = `${baseURL}${endpoint}`;
 	if (isSandbox) {
 		url += url.includes('?') ? '&isSandbox=1' : '?isSandbox=1';
 	}
 
+	return { url };
+}
+
+export async function pagBankConnectRequest(
+	this: IExecuteFunctions,
+	method: string,
+	endpoint: string,
+	body?: any,
+	qs?: any,
+): Promise<any> {
+	const { url } = await pagBankResolveConnectRequestUrl.call(this, endpoint);
+
 	const options: any = {
 		method,
 		url,
 		headers: {
-			'Authorization': `Bearer ${connectKey}`,
-			'Platform': 'n8n',
-			'Platform-Version': getN8nPlatformVersionHeader(),
-			'Module-Version': getPagBankModuleVersion(),
 			'Content-Type': 'application/json',
 		},
 		json: true,
@@ -186,7 +136,11 @@ export async function pagBankConnectRequest(
 	}
 
 	try {
-		const response = await this.helpers.httpRequest(options);
+		const response = await this.helpers.httpRequestWithAuthentication.call(
+			this,
+			'pagBankConnect',
+			options,
+		);
 		return response;
 	} catch (error: any) {
 		// Extract PagBank specific error message
