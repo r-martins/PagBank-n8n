@@ -1,12 +1,15 @@
 # Publishes to npm via Trusted Publisher (OIDC) — no NPM_TOKEN.
-# Configure the workflow filename + repo on npmjs.com → Package → Settings → Trusted publishing.
+# Runs when a version tag is pushed (e.g. 2.1.2 or v2.1.2). Configure workflow filename + repo on npmjs.com → Trusted publishing.
 # Requires Node ≥ 22.14 and npm ≥ 11.5.1 (https://docs.npmjs.com/trusted-publishers).
 # Provenance is generated automatically when publishing from a public repo via trusted publishing.
 name: Publish npm
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
+      # Bare semver tags (e.g. 2.1.2) — three dot-separated segments
+      - '*.*.*'
 
 permissions:
   contents: read
