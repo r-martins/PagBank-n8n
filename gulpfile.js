@@ -6,8 +6,8 @@ function buildIcons() {
 }
 
 function buildLib() {
-	return src('lib/**/*')
-		.pipe(dest('dist/'));
+	// Must land beside dist/lib/pagbank/PagBankEncryption.js (tsc output), not dist/pagbank/.
+	return src('lib/**/*.js', { base: 'lib' }).pipe(dest('dist/lib'));
 }
 
 exports['build:icons'] = buildIcons;
