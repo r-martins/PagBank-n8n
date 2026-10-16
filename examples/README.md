@@ -2,6 +2,8 @@
 
 Estes exemplos foram configurados para funcionar quando o pacote é instalado via npm.
 
+**Dual partner (v5+):** use Connect Key `CON…` (PagBank) ou `CONVD…` (Vindi). Payment Link e split só funcionam com keys PagBank. Payload canônico de webhook Vindi: `webhook-vindi-canonical-payload.json` (POST no Trigger para testar).
+
 ## 📦 Instalação via npm (Recomendado)
 
 Quando você instala o pacote via npm:

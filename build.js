@@ -89,21 +89,26 @@ try {
     console.log('✅ PagBankSimple.node.json copied');
   }
 
-  // Copy lib/pagbank (SDK) to dist so dist never has stale or console-containing builds
-  const libPagbank = 'lib/pagbank';
-  const distLibPagbank = 'dist/lib/pagbank';
-  if (fs.existsSync(libPagbank)) {
-    if (!fs.existsSync(distLibPagbank)) {
-      fs.mkdirSync(distLibPagbank, { recursive: true });
-    }
-    const libFiles = fs.readdirSync(libPagbank);
-    libFiles.forEach((file) => {
-      const src = path.join(libPagbank, file);
-      if (fs.statSync(src).isFile()) {
-        fs.copyFileSync(src, path.join(distLibPagbank, file));
+  // Copy lib/* (PagBank SDK JS + any plain JS under lib) to dist
+  const libRoot = 'lib';
+  const distLibRoot = 'dist/lib';
+  if (fs.existsSync(libRoot)) {
+    const copyLibDir = (srcDir, destDir) => {
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
       }
-    });
-    console.log('✅ lib/pagbank (SDK) copied to dist');
+      for (const file of fs.readdirSync(srcDir)) {
+        const src = path.join(srcDir, file);
+        const dest = path.join(destDir, file);
+        if (fs.statSync(src).isDirectory()) {
+          copyLibDir(src, dest);
+        } else if (file.endsWith('.js')) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    };
+    copyLibDir(libRoot, distLibRoot);
+    console.log('✅ lib/**/*.js copied to dist/lib');
   }
   
   // Remove old webhook files if they exist

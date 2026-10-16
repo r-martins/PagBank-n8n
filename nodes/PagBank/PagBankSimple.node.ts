@@ -10,10 +10,25 @@ import {
 import {
 	validateConnectKey,
 	pagBankConnectRequest,
-	isSandboxConnectKey,
 	pagBankInternalSandboxSplitGet,
+	pagBankRawHttpRequest,
+	getConnectKey,
+	parseOrderItems,
+	applyNotificationUrl,
 } from './PagBankUtils';
+import {
+	assertNoSplitForVindi,
+	assertPagBankOnlyOperation,
+	getPartner,
+	isSandboxConnectKey,
+	isVindiKey,
+} from './partner';
 import { encryptCard } from '../../lib/pagbank/PagBankEncryption';
+import {
+	buildVindiTokenizeRequest,
+	extractGatewayToken,
+	formatVindiTokenizeError,
+} from '../../lib/vindi/vindiTokenize';
 
 type SplitMethod = 'FIXED' | 'PERCENTAGE';
 
@@ -236,17 +251,34 @@ async function resolveSplitDetailsRoute(
 	return { mode: 'connect', splitId };
 }
 
+/** Resolve PagBank ORDE_… / order id → first charge id (CHAR_…). */
+async function resolveChargeIdFromOrder(
+	this: IExecuteFunctions,
+	orderId: string,
+): Promise<string> {
+	const order = await pagBankConnectRequest.call(this, 'GET', 'order', undefined, undefined, orderId);
+	const chargeId = order?.charges?.[0]?.id;
+	if (!chargeId || typeof chargeId !== 'string') {
+		throw new NodeOperationError(
+			this.getNode(),
+			`Could not find a charge id on order ${orderId}. Ensure the order exists and has a charge.`,
+		);
+	}
+	return chargeId;
+}
+
 export class PagBankSimple implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'PagBank',
+		displayName: 'PB Integrações (former PagBank Connect)',
 		name: 'pagBank',
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
-		description: 'Integration with PagBank for payment processing',
+		description:
+			'PagBank and Vindi payments via PB Integrações (Connect Key CON… or CONVD…)',
 		defaults: {
-			name: 'PagBank',
+			name: 'PB Integrações',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
@@ -254,6 +286,7 @@ export class PagBankSimple implements INodeType {
 			{
 				name: 'pagBankConnect',
 				required: true,
+				testedBy: 'pagBankConnectApiTest',
 			},
 		],
 		properties: [
@@ -280,6 +313,13 @@ export class PagBankSimple implements INodeType {
 					value: 'getOrderStatus',
 					description: 'Retrieve the status of an order',
 					action: 'Get order status',
+				},
+				{
+					name: 'Refund / Cancel Charge',
+					value: 'refundCharge',
+					description:
+						'Full or partial refund (PagBank CHAR_… / ORDE_… or Vindi pb_ord_… / charge id). Optional amount in cents for partial.',
+					action: 'Refund or cancel charge',
 				},
 				{
 					name: 'Create Credit Card Charge',
@@ -664,11 +704,39 @@ export class PagBankSimple implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				placeholder: 'e.g. ORD123456789',
-				description: 'Order ID to query',
+				placeholder: 'e.g. ORDE_… or pb_ord_…',
+				description: 'Order ID to query (same Connect Key that created it)',
 				displayOptions: {
 					show: {
 						operation: ['getOrderStatus'],
+					},
+				},
+			},
+			{
+				displayName: 'Charge / Order ID',
+				name: 'refundChargeId',
+				type: 'string',
+				default: '',
+				required: true,
+				placeholder: 'e.g. CHAR_…, ORDE_…, pb_ord_…, or numeric charge id',
+				description:
+					'PagBank: charge id (CHAR_…) or order id (ORDE_… — resolved to charge). Vindi: pb_ord_… or partner charge/bill id.',
+				displayOptions: {
+					show: {
+						operation: ['refundCharge'],
+					},
+				},
+			},
+			{
+				displayName: 'Refund Amount (cents, optional)',
+				name: 'refundAmountCents',
+				type: 'number',
+				default: 0,
+				description:
+					'Leave 0 / empty for full refund. Set a value in cents for partial refund (e.g. 100 = R$ 1,00).',
+				displayOptions: {
+					show: {
+						operation: ['refundCharge'],
 					},
 				},
 			},
@@ -763,7 +831,8 @@ export class PagBankSimple implements INodeType {
 						type: 'string',
 						default: '',
 						placeholder: 'e.g. https://example.com/webhook',
-						description: 'URL to receive payment notifications (maximum 100 characters)',
+						description:
+							'URL for payment notifications (PagBank Trigger / webhook). URLs over 100 characters automatically use PB Integrações enable_proxy. Vindi always uses the proxy.',
 					},
 					{
 						displayName: 'Installments',
@@ -792,6 +861,60 @@ export class PagBankSimple implements INodeType {
 		],
 	};
 
+	methods = {
+		credentialTest: {
+			async pagBankConnectApiTest(this: any, credential: any): Promise<any> {
+				const connectKey = (credential.connectKey as string) || '';
+				if (!connectKey) {
+					return { status: 'Error', message: 'Connect Key is required' };
+				}
+
+				const url = isVindiKey(connectKey)
+					? 'https://api.pbintegracoes.com/v1/connectInfo'
+					: 'https://ws.pbintegracoes.com/pspro/v7/connect/connectInfo';
+
+				try {
+					const helpers = this.helpers;
+					const requestFn = helpers.httpRequest || helpers.request;
+					const response = await requestFn.call(helpers, {
+						method: 'GET',
+						url,
+						headers: {
+							Authorization: `Bearer ${connectKey}`,
+							Platform: 'n8n',
+							Accept: 'application/json',
+						},
+						json: true,
+					});
+
+					const ok =
+						response?.status === 'VALID' ||
+						!!response?.account_id ||
+						!!response?.partner ||
+						!!response?.email;
+
+					if (ok) {
+						const partner = getPartner(connectKey);
+						return {
+							status: 'OK',
+							message: `Connection successful (${partner}${isSandboxConnectKey(connectKey) ? ', sandbox' : ''})`,
+						};
+					}
+
+					return {
+						status: 'Error',
+						message: response?.message || response?.status || 'Invalid Connect Key',
+					};
+				} catch (error: any) {
+					return {
+						status: 'Error',
+						message: error.message || 'Could not validate Connect Key',
+					};
+				}
+			},
+		},
+	};
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
@@ -811,6 +934,8 @@ export class PagBankSimple implements INodeType {
 					responseData = await nodeInstance.createCreditCardCharge.call(this, i);
 				} else if (operation === 'getOrderStatus') {
 					responseData = await nodeInstance.getOrderStatus.call(this, i);
+				} else if (operation === 'refundCharge') {
+					responseData = await nodeInstance.refundCharge.call(this, i);
 				} else if (operation === 'validateConnectKey') {
 					responseData = await nodeInstance.validateConnectKey.call(this, i);
 				} else if (operation === 'getSplitDetails') {
@@ -841,6 +966,13 @@ export class PagBankSimple implements INodeType {
 	}
 
 	private async createPaymentLink(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
+		try {
+			assertPagBankOnlyOperation(connectKey, 'Create Payment Link');
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
+		}
+
 		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
 		const referenceId = additionalFields?.referenceId as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
@@ -894,45 +1026,46 @@ export class PagBankSimple implements INodeType {
 			body.redirect_url = redirectUrl;
 		}
 
-		if (notificationUrl) {
-			// Validate URL length (maximum 100 characters)
-			if (notificationUrl.length > 100) {
-				throw new NodeOperationError(this.getNode(), 'Notification URL must have maximum 100 characters');
-			}
-			body.notification_urls = [notificationUrl.trim()];
-		}
+		applyNotificationUrl(body, notificationUrl, connectKey);
 
-		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/checkouts', body);
+		const response = await pagBankConnectRequest.call(this, 'POST', 'checkouts', body);
 		return response;
 	}
-	
+
 	private async createPixOrder(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
 		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
 		const referenceId = additionalFields?.referenceId as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
 		const itemsData = this.getNodeParameter('items', itemIndex) as any;
-		
-		// n8n returns object with itemProperties array for fixedCollection with multipleValues
-		let items: any[] = [];
-		if (itemsData && itemsData.itemProperties && Array.isArray(itemsData.itemProperties)) {
-			items = itemsData.itemProperties.map((item: any) => ({
-				name: item.name || '',
-				reference_id: item.reference_id || undefined,
-				quantity: item.quantity || 1,
-				unit_amount: item.unit_amount || 0
-			}));
-		} else {
-			items = [];
+		const items = parseOrderItems(itemsData);
+
+		if (items.length === 0) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Add at least one Order Item (Product Name + Amount in cents).',
+				{
+					description:
+						'Click “Add Item” under Order Items. Amount is in cents (100 = R$ 1,00). An empty items list sends value 0 and the API rejects the order.',
+				},
+			);
 		}
-		
+
 		const notificationUrl = additionalFields?.notificationUrl as string;
 
 		const orderTotalCents = items.reduce(
 			(total: number, item: any) => total + item.unit_amount * item.quantity,
 			0,
 		);
+
+		if (orderTotalCents <= 0) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Order total must be greater than zero (Amount in cents).',
+			);
+		}
 
 		const splitMethod = this.getNodeParameter('splitMethod', itemIndex) as SplitMethod;
 		const splitReceiversData = this.getNodeParameter('splitReceivers', itemIndex) as any;
@@ -945,6 +1078,12 @@ export class PagBankSimple implements INodeType {
 			});
 		} catch (e: any) {
 			throw new NodeOperationError(this.getNode(), e.message || 'Invalid split configuration');
+		}
+
+		try {
+			assertNoSplitForVindi(connectKey, !!splitsPayload);
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
 		}
 
 		const body: any = {
@@ -979,26 +1118,60 @@ export class PagBankSimple implements INodeType {
 			body.reference_id = referenceId.trim();
 		}
 
-		if (notificationUrl) {
-			// Validate URL length (maximum 100 characters)
-			if (notificationUrl.length > 100) {
-				throw new NodeOperationError(this.getNode(), 'Notification URL must have maximum 100 characters');
-			}
-			body.notification_urls = [notificationUrl.trim()];
-		}
+		applyNotificationUrl(body, notificationUrl, connectKey);
 
-		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/orders', body);
+		const response = await pagBankConnectRequest.call(this, 'POST', 'orders', body);
 		return response;
 	}
 
 	private async getOrderStatus(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const orderId = this.getNodeParameter('orderId', itemIndex) as string;
 
-		const response = await pagBankConnectRequest.call(this, 'GET', `/connect/ws/orders/${orderId}`);
+		const response = await pagBankConnectRequest.call(this, 'GET', 'order', undefined, undefined, orderId);
 		return response;
 	}
 
+	/**
+	 * POST …/charges/{id}/cancel — PagBank (v7) and Vindi (v1).
+	 * Optional body amount.value in cents for partial refund.
+	 */
+	private async refundCharge(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
+		const rawId = ((this.getNodeParameter('refundChargeId', itemIndex) as string) || '').trim();
+		if (!rawId) {
+			throw new NodeOperationError(this.getNode(), 'Charge / Order ID is required for refund');
+		}
+
+		let cancelId = rawId;
+		if (isVindiKey(connectKey)) {
+			// API v1 accepts pb_ord_… or numeric partner charge/bill id
+			cancelId = rawId;
+		} else if (rawId.startsWith('ORDE_') || rawId.startsWith('pb_ord_')) {
+			cancelId = await resolveChargeIdFromOrder.call(this, rawId);
+		}
+		// else assume CHAR_… or other charge id
+
+		const amountCents = Number(this.getNodeParameter('refundAmountCents', itemIndex) as number) || 0;
+		const body =
+			amountCents > 0
+				? {
+						amount: {
+							value: amountCents,
+						},
+					}
+				: undefined;
+
+		return await pagBankConnectRequest.call(this, 'POST', 'chargeCancel', body, undefined, cancelId);
+	}
+
 	private async getSplitDetails(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
+		try {
+			assertPagBankOnlyOperation(connectKey, 'Get Split Details');
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
+		}
+
 		const resolved = await resolveSplitDetailsRoute.call(this, itemIndex);
 
 		if (resolved.mode === 'internalUnauth') {
@@ -1010,11 +1183,24 @@ export class PagBankSimple implements INodeType {
 			}
 		}
 
-		const encoded = encodeURIComponent(resolved.splitId);
-		return await pagBankConnectRequest.call(this, 'GET', `/connect/ws/splits/${encoded}`);
+		return await pagBankConnectRequest.call(
+			this,
+			'GET',
+			'split',
+			undefined,
+			undefined,
+			resolved.splitId,
+		);
 	}
 
 	private async releaseSplitCustody(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
+		try {
+			assertPagBankOnlyOperation(connectKey, 'Release Split Custody');
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
+		}
+
 		const raw = this.getNodeParameter('splitId', itemIndex) as string;
 		const splitId = normalizeSplitId(raw);
 		if (!splitId || !/^SPLI_[A-F0-9-]+$/i.test(splitId)) {
@@ -1043,69 +1229,62 @@ export class PagBankSimple implements INodeType {
 		}
 
 		const body = { receivers };
-		const encoded = encodeURIComponent(splitId);
 		return await pagBankConnectRequest.call(
 			this,
 			'POST',
-			`/connect/ws/splits/${encoded}/custody/release`,
+			'splitCustodyRelease',
 			body,
+			undefined,
+			splitId,
 		);
 	}
 
 	private async validateConnectKey(this: IExecuteFunctions, itemIndex: number): Promise<any> {
-		const credentials = await this.getCredentials('pagBankConnect');
-		if (!credentials) {
-			throw new NodeOperationError(this.getNode(), 'PagBank Connect credentials not found');
-		}
-
-		const connectKey = (credentials as any).connectKey;
+		const connectKey = await getConnectKey.call(this);
 		const validation = await validateConnectKey.call(this as any, connectKey);
-		
+
 		return {
 			...validation,
-			connectKey: connectKey.substring(0, 10) + '...', // Mask the key
+			connectKey: connectKey.substring(0, 10) + '...',
+			partner: getPartner(connectKey),
 			environment: isSandboxConnectKey(connectKey) ? 'Sandbox' : 'Produção',
 			validatedAt: new Date().toISOString(),
 		};
 	}
 
 	private async createCreditCardCharge(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
 		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
 		const referenceId = additionalFields?.referenceId as string;
 		const customerName = this.getNodeParameter('customerName', itemIndex) as string;
 		const customerEmail = this.getNodeParameter('customerEmail', itemIndex) as string;
 		const customerTaxId = this.getNodeParameter('customerTaxId', itemIndex) as string;
 		const itemsData = this.getNodeParameter('items', itemIndex) as any;
-		
-		// n8n returns object with itemProperties array for fixedCollection with multipleValues
-		let items: any[] = [];
-		if (itemsData && itemsData.itemProperties && Array.isArray(itemsData.itemProperties)) {
-			items = itemsData.itemProperties.map((item: any) => ({
-				name: item.name || '',
-				reference_id: item.reference_id || undefined,
-				quantity: item.quantity || 1,
-				unit_amount: item.unit_amount || 0
-			}));
-		} else {
-			items = [];
+		const items = parseOrderItems(itemsData);
+
+		if (items.length === 0) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Add at least one Order Item (Product Name + Amount in cents).',
+			);
 		}
-		
+
 		const notificationUrl = additionalFields?.notificationUrl as string;
 		const cardData = this.getNodeParameter('cardData.card', itemIndex) as any;
-		const installments = additionalFields?.installments as number || 1;
+		const installments = (additionalFields?.installments as number) || 1;
 		const softDescriptor = additionalFields?.softDescriptor as string;
-
-		// Get encryption public key
-		const nodeInstance = new PagBankSimple();
-		const publicKey = await nodeInstance.getEncryptionPublicKey.call(this);
-		
-		// Encrypt card data using external JavaScript
-		const cardToken = await nodeInstance.encryptCardData.call(this, cardData, publicKey);
 
 		const orderTotalCents = items.reduce(
 			(total: number, item: any) => total + item.unit_amount * item.quantity,
 			0,
 		);
+
+		if (orderTotalCents <= 0) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Order total must be greater than zero (Amount in cents).',
+			);
+		}
 
 		const splitMethod = this.getNodeParameter('splitMethod', itemIndex) as SplitMethod;
 		const splitReceiversData = this.getNodeParameter('splitReceivers', itemIndex) as any;
@@ -1120,11 +1299,55 @@ export class PagBankSimple implements INodeType {
 			throw new NodeOperationError(this.getNode(), e.message || 'Invalid split configuration');
 		}
 
+		try {
+			assertNoSplitForVindi(connectKey, !!splitsPayload);
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
+		}
+
+		const nodeInstance = new PagBankSimple();
+		const vindi = isVindiKey(connectKey);
+
+		let cardPayload: { encrypted?: string; gateway_token?: string; store?: boolean };
+		if (vindi) {
+			const gatewayToken = await nodeInstance.tokenizeVindiCardData.call(this, cardData);
+			cardPayload = { gateway_token: gatewayToken };
+		} else {
+			const publicKey = await nodeInstance.getEncryptionPublicKey.call(this);
+			const cardToken = await nodeInstance.encryptCardData.call(this, cardData, publicKey);
+			cardPayload = { encrypted: cardToken, store: false };
+		}
+
+		const paymentMethod: any = {
+			type: 'CREDIT_CARD',
+			installments: installments,
+			capture: true,
+			card: cardPayload,
+		};
+
+		// soft_descriptor is PagBank-only (configured in Vindi admin for CONVD keys)
+		if (!vindi) {
+			paymentMethod.soft_descriptor = softDescriptor || 'PagBank';
+		}
+
+		const charge: any = {
+			description: `Pagamento via cartão - ${items.map((item: any) => item.name).join(', ')}`,
+			amount: {
+				value: orderTotalCents,
+				currency: 'BRL',
+			},
+			payment_method: paymentMethod,
+		};
+
+		if (splitsPayload) {
+			charge.splits = splitsPayload;
+		}
+
 		const body: any = {
 			customer: {
 				name: customerName,
 				email: customerEmail,
-				tax_id: customerTaxId,
+				tax_id: String(customerTaxId || '').replace(/\D/g, ''),
 			},
 			items: items.map((item: any, index: number) => ({
 				reference_id: item.reference_id || `ITEM-${index + 1}`,
@@ -1132,54 +1355,81 @@ export class PagBankSimple implements INodeType {
 				quantity: item.quantity,
 				unit_amount: item.unit_amount,
 			})),
-			charges: [
-				{
-					description: `Pagamento via cartão - ${items.map((item: any) => item.name).join(', ')}`,
-					amount: {
-						value: orderTotalCents,
-						currency: 'BRL',
-					},
-					payment_method: {
-						type: 'CREDIT_CARD',
-						installments: installments,
-						capture: true,
-						soft_descriptor: softDescriptor || 'PagBank',
-						card: {
-							encrypted: cardToken,
-							store: false,
-						},
-					},
-				},
-			],
+			charges: [charge],
 		};
 
-		if (splitsPayload) {
-			body.charges[0].splits = splitsPayload;
-		}
-
-		// Add reference_id only if provided
 		if (referenceId && referenceId.trim()) {
 			body.reference_id = referenceId.trim();
 		}
 
-		if (notificationUrl) {
-			// Validate URL length (maximum 100 characters)
-			if (notificationUrl.length > 100) {
-				throw new NodeOperationError(this.getNode(), 'Notification URL must have maximum 100 characters');
-			}
-			body.notification_urls = [notificationUrl.trim()];
-		}
+		applyNotificationUrl(body, notificationUrl, connectKey);
 
-		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/orders', body);
+		const response = await pagBankConnectRequest.call(this, 'POST', 'orders', body);
 		return response;
 	}
 
 	private async getEncryptionPublicKey(this: IExecuteFunctions): Promise<string> {
-		const response = await pagBankConnectRequest.call(this, 'POST', '/connect/ws/public-keys', {
+		const response = await pagBankConnectRequest.call(this, 'POST', 'publicKeys', {
 			type: 'card',
 		});
-		
+
 		return response.public_key;
+	}
+
+	/** Vindi: GET tokenize/config → POST public payment_profiles → gateway_token */
+	private async tokenizeVindiCardData(this: IExecuteFunctions, cardData: any): Promise<string> {
+		const requiredFields = ['number', 'expMonth', 'expYear', 'securityCode', 'holder'];
+		const missing = requiredFields.filter(
+			(f) => !cardData?.[f] || cardData[f].toString().trim() === '',
+		);
+		if (missing.length > 0) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Missing required card data fields: ${missing.join(', ')}`,
+			);
+		}
+
+		const config = await pagBankConnectRequest.call(this, 'GET', 'tokenizeConfig');
+		const publicApiKey = config.public_api_key || config.publicKey;
+		const profilesUrl = config.payment_profiles_url || config.paymentProfilesUrl;
+
+		if (!publicApiKey || !profilesUrl) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Tokenize config incomplete: missing public_api_key or payment_profiles_url',
+			);
+		}
+
+		let built;
+		try {
+			built = buildVindiTokenizeRequest({
+				publicApiKey,
+				profilesUrl,
+				holderName: String(cardData.holder).trim(),
+				number: String(cardData.number).replace(/\s/g, ''),
+				expMonth: cardData.expMonth,
+				expYear: cardData.expYear,
+				cvv: String(cardData.securityCode),
+			});
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message || 'Invalid card data for tokenization');
+		}
+
+		try {
+			const body = await pagBankRawHttpRequest.call(this, {
+				method: 'POST',
+				url: profilesUrl,
+				body: built.requestBody,
+				headers: {
+					Authorization: built.basicAuthHeader,
+				},
+			});
+			return extractGatewayToken(body);
+		} catch (error: any) {
+			const responseBody = error.response?.body || error.response?.data || error.cause || {};
+			const msg = formatVindiTokenizeError(responseBody);
+			throw new NodeOperationError(this.getNode(), msg || error.message || 'Failed to tokenize card');
+		}
 	}
 
 	private async encryptCardData(this: IExecuteFunctions, cardData: any, publicKey: string): Promise<string> {

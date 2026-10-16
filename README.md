@@ -1,6 +1,8 @@
 # n8n-nodes-pagbank-connect
 
-n8n integration with PagBank Connect for Brazilian payment processing.
+**PB Integrações (former PagBank Connect)** — n8n community node for **PagBank** and **Vindi** via [PB Integrações](https://pbintegracoes.com/?utm_source=n8n).
+
+Package slug `n8n-nodes-pagbank-connect` is unchanged (npm / community install compatibility).
 
 
 ![NPM Downloads](https://img.shields.io/npm/d18m/n8n-nodes-pagbank-connect?label=downloads%20last%2018%20months)
@@ -10,15 +12,15 @@ n8n integration with PagBank Connect for Brazilian payment processing.
 
 ## Features
 
+- ✅ **Dual partner** - Same node for PagBank (`CON…`) and Vindi (`CONVD…`) Connect Keys
 - ✅ **PIX** - Instant payments with QR Code
-- ✅ **Credit/Debit Card** - Secure card processing
-- ✅ **Payment Links** - Custom checkout
-- ✅ **Payment split** - Split PIX and card orders between multiple PagBank accounts (FIXED or PERCENTAGE), plus split details and custody release
-- ✅ **Recurring Subscriptions** - Recurring payments (coming soon)
-- ✅ **Webhooks** - Real-time notifications
-- ✅ **Sandbox Environment** - Safe testing
-- ✅ **Official Partner** - [PagBank Integrations](https://pbintegracoes.com/?utm_source=n8n) is an Official PagBank Partner since 2014.
-- ✅ **Reduced fees** - You pay less fees on PagBank when using our integrations
+- ✅ **Credit Card** - PagBank RSA encrypt or Vindi `gateway_token` (server-side tokenize)
+- ✅ **Refund / Cancel** - Full or partial (`POST …/charges/{id}/cancel`) for PagBank and Vindi
+- ✅ **Payment Links** - PagBank hosted checkout (not available for Vindi keys yet)
+- ✅ **Payment split** - PagBank only (FIXED or PERCENTAGE), plus split details and custody release
+- ✅ **Webhooks** - Real-time notifications (canonical PB payload for both partners)
+- ✅ **Sandbox** - `CONSANDBOX…` (PagBank) or `CONVDSANDBOX…` (Vindi)
+- ✅ **Official Partner** - [PagBank Integrations](https://pbintegracoes.com/?utm_source=n8n) since 2014
 
 ## Installation
 
@@ -38,31 +40,41 @@ API calls send `Platform-Version` (host n8n) and `Module-Version` (this package)
 
 ### 1. Get Credentials
 
-Visit [PagBank Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n) to get your Connect Key for free
+Visit [PB Integrações Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n) for a production Connect Key.
 
-If you need a Test Connect Key, [click here](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
+Sandbox: [connect/sandbox](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n) — PagBank keys start with `CONSANDBOX`; Vindi keys with `CONVDSANDBOX`.
+
+| Key prefix | Partner | API |
+|------------|---------|-----|
+| `CON…` / `CONSANDBOX…` | PagBank | `ws.pbintegracoes.com/pspro/v7` |
+| `CONVD…` / `CONVDSANDBOX…` | Vindi | `api.pbintegracoes.com/v1` |
+
+Never call PagBank or Vindi hosts directly with the Connect Key. Never send `?isSandbox=1` — the API detects sandbox from the key prefix.
 
 ### 2. Configure in n8n
 
-1. Add your Connect key in PagBank Connect credentials
-2. Click Save and check if the connection was successful.
+1. Add your Connect Key in **PagBank Connect** credentials
+2. Save — the PagBank node credential test routes `connectInfo` by partner. You can also run **Validate Connect Key**.
 
 ## Available Nodes
 
-### PagBank (Main)
-- **Create Payment Link** - Generates checkout links for customers to pay on PagBank
-- **Create PIX Order** - Creates PIX payments (optional **payment split** on the QR code)
-- **Create Credit Card Charge** - Processes a payment with the provided credit card data (optional **payment split** on the charge)
-- **Check order status** - Queries the status of an ORDER with PagBank (must have been generated with this connect key)
-- **Get Split Details** - Reads a split by `SPLI_…` id or SPLIT `href` from the order. Sandbox: public API on `internal.sandbox.api.pagseguro.com` when using a sandbox Connect key or pasting that URL; production: authenticated Connect API.
-- **Release Split Custody** - Releases held funds for one or more receiver **account ids** before the scheduled custody date (Connect API).
-- **Validate Connect Key** - Validates the Connect Key configured in your credentials
+### PB Integrações (Main) — node type `pagBank`
+- **Create Payment Link** - PagBank checkout links only (blocked for `CONVD…`)
+- **Create PIX Order** - PIX (optional **payment split** on PagBank keys only)
+- **Create Credit Card Charge** - Card PAN in the node → PagBank RSA `encrypted` or Vindi `gateway_token`
+- **Get Order Status** - Same Connect Key that created the order (`ORDE_*` or `pb_ord_*`)
+- **Refund / Cancel Charge** - Full or partial refund in cents (`CHAR_…` / `ORDE_…` / `pb_ord_…`)
+- **Get Split Details** / **Release Split Custody** - PagBank only
+- **Validate Connect Key** - Partner-aware `connectInfo`
 
 ### Payment split (marketplace / multi-seller)
-Use **Split Method** and **Split Receivers** on **Create PIX Order** or **Create Credit Card Charge** to divide the payment between accounts (PagBank `ACCO_…` ids). **FIXED** requires amounts in **cents** that sum to the order total; **PERCENTAGE** requires integer percents summing to **100**. You can set custody, chargeback allocation, and (for cards) **liable**. After payment, the order `links` may include `rel: SPLIT` — use **Get Split Details** to inspect the split and **Release Split Custody** when eligible. See [PagBank split documentation](https://developer.pagbank.com.br/reference/divisao-de-pagamento) and [PagBank Connect n8n docs]().
+PagBank keys only. Use **Split Method** and **Split Receivers** on PIX or card. **FIXED** amounts in **cents** sum to order total; **PERCENTAGE** sums to **100**. See [PagBank split documentation](https://developer.pagbank.com.br/reference/divisao-de-pagamento).
 
 ### PagBank Connect Trigger
-- **Payment Trigger** - Receives notifications. You can filter notifications by payment status, payment methods or denial reason.
+- Receives canonical PB notifications (PagBank or Vindi relay). Filters by status / method / decline reason.
+- Output includes `partner`, `partnerBillId`, `webhookEvent` when present.
+- Put the Trigger webhook URL in **Notification URL** on create PIX/CC/payment link. URLs longer than 100 characters (typical n8n/ngrok) set `enable_proxy: true` automatically; Vindi always uses the proxy.
+- **Vindi sandbox:** partner webhook registration may require pasting the URL manually in the Vindi sandbox panel; production webhooks are registered by PB Integrações.
 
 ## Data Format
 
@@ -80,16 +92,13 @@ Required for most operations, except payment link creation.
 ## Environments
 
 ### Sandbox (Test)
-- The environment will be for testing whenever your Connect Key starts with *CONSANDBOX*. Get yours [here](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n).
-- Automatic approval for values < R$ 100
-- 5 minute delay for values between R$ 100-200
-- Ideal for development and testing
-- See [Test Cards](https://ajuda.pbintegracoes.com/hc/pt-br/articles/22375426666253-Cartões-de-Crédito-para-Testes-PagBank)
+- PagBank: Connect Key starts with `CONSANDBOX` — [get one](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n)
+- Vindi: Connect Key starts with `CONVDSANDBOX`
+- PagBank sandbox: automatic approval for values under R$ 100; delay for R$ 100–200
+- [PagBank test cards](https://ajuda.pbintegracoes.com/hc/pt-br/articles/22375426666253-Cartões-de-Crédito-para-Testes-PagBank)
 
 ### Production
-- Real payment processing
-- Requires PagBank approval
-- Use only after complete testing
+- Real payment processing with a live Connect Key (`CON…` or `CONVD…`)
 
 ## Webhooks
 

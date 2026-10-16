@@ -1,0 +1,21 @@
+{
+  "id": "pb_ord_example",
+  "reference_id": "pedido-1001",
+  "status": "PAID",
+  "partner": "vindi",
+  "partner_bill_id": 21985571,
+  "partner_charge_id": 21381525,
+  "event": "bill_paid",
+  "charges": [
+    {
+      "id": "21381525",
+      "status": "PAID",
+      "amount": { "value": 10000, "currency": "BRL" },
+      "payment_method": { "type": "PIX" }
+    }
+  ],
+  "customer": {
+    "name": "Cliente Exemplo",
+    "email": "cliente@exemplo.test"
+  }
+}

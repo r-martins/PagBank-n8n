@@ -1,17 +1,20 @@
 {
   "name": "n8n-nodes-pagbank-connect",
-  "version": "2.1.5",
-  "description": "n8n integration with PagBank Connect for Brazilian payment processing (PIX, Boleto, Credit Card, Payment Link, etc)",
+  "version": "5.0.0",
+  "description": "PB Integrações (former PagBank Connect) — PagBank and Vindi payments for n8n (PIX, card, payment link, refund, split, webhooks)",
   "keywords": [
     "n8n-community-node-package",
     "n8n-community-node",
     "pagbank",
     "pagseguro",
+    "vindi",
+    "pbintegracoes",
     "payment",
     "brazil",
     "pix",
     "boleto",
-    "credit-card"
+    "credit-card",
+		"brazil"
   ],
   "license": "MIT",
   "homepage": "https://pbintegracoes.com/n8n",

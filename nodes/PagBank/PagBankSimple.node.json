@@ -2,10 +2,10 @@
 	"node": {
 		"version": 1,
 		"name": "pagBank",
-		"displayName": "PagBank",
-		"description": "Integration with PagBank for payment processing",
+		"displayName": "PB Integrações (former PagBank Connect)",
+		"description": "PagBank and Vindi payments via PB Integrações (Connect Key CON… or CONVD…)",
 		"defaults": {
-			"name": "PagBank"
+			"name": "PB Integrações"
 		},
 		"inputs": ["main"],
 		"outputs": ["main"],
@@ -20,5 +20,3 @@
 		]
 	}
 }
-
-
