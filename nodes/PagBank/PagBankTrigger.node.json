@@ -2,10 +2,10 @@
 	"node": {
 		"version": 1,
 		"name": "pagBankTrigger",
-		"displayName": "PagBank Connect Trigger",
-		"description": "Trigger to receive PagBank Connect notifications",
+		"displayName": "PB Integrações Trigger (former PagBank Connect)",
+		"description": "Receive PB Integrações payment notifications (PagBank or Vindi canonical payloads)",
 		"defaults": {
-			"name": "PagBank Connect Trigger"
+			"name": "PB Integrações Trigger"
 		},
 		"inputs": [],
 		"outputs": ["main"],
@@ -41,5 +41,3 @@
 		]
 	}
 }
-
-

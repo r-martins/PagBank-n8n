@@ -10,15 +10,16 @@ import {
 
 export class PagBankTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'PagBank Connect Trigger',
+		displayName: 'PB Integrações Trigger (former PagBank Connect)',
 		name: 'pagBankTrigger',
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['trigger'],
 		version: 1,
-		description: 'Trigger to receive PagBank Connect notifications',
+		description:
+			'Receive PB Integrações payment notifications (PagBank or Vindi canonical payloads)',
 		documentationUrl: 'https://ajuda.pbintegracoes.com/hc/pt-br/articles/40055875188621-Como-testar-as-Triggers-Webhooks-do-PagBank-no-n8n',
 		defaults: {
-			name: 'PagBank Connect Trigger',
+			name: 'PB Integrações Trigger',
 		},
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
@@ -64,6 +65,10 @@ export class PagBankTrigger implements INodeType {
 					{
 						name: 'Credit Card',
 						value: 'CREDIT_CARD',
+					},
+					{
+						name: 'Credit Card 3DS',
+						value: 'CREDIT_CARD_3DS',
 					},
 					{
 						name: 'Bank Slip',
@@ -135,7 +140,7 @@ export class PagBankTrigger implements INodeType {
 		
 		// Get first charge (payment)
 		const firstCharge = charges[0] || {};
-		const status = firstCharge.status || 'UNKNOWN';
+		const status = firstCharge.status || (bodyData as any).status || 'UNKNOWN';
 		const amount = firstCharge.amount || {};
 		const paymentMethod = firstCharge.payment_method || {};
 		const paidAt = firstCharge.paid_at || null;
@@ -144,7 +149,7 @@ export class PagBankTrigger implements INodeType {
 		// Apply filters
 		let shouldProcess = true;
 
-		// Filter by status
+		// Filter by status (charge or order-level — Vindi canonical payloads often set both)
 		if (filterByStatus.length > 0 && !filterByStatus.includes(status)) {
 			shouldProcess = false;
 		}
@@ -177,25 +182,36 @@ export class PagBankTrigger implements INodeType {
 			};
 		}
 
+		const partner = (bodyData as any).partner || undefined;
+		const partnerBillId = (bodyData as any).partner_bill_id || undefined;
+		const webhookEvent = (bodyData as any).event || undefined;
+		const orderStatus = (bodyData as any).status || status;
+
 		// Build processed data
 		const processedData: any = {
 			// Essential order data
 			orderId: orderId,
 			referenceId: referenceId,
-			status: status,
-			
+			status: orderStatus,
+			chargeStatus: status,
+
+			// Partner (vindi | pagbank when present on canonical PB payloads)
+			partner: partner,
+			partnerBillId: partnerBillId,
+			webhookEvent: webhookEvent,
+
 			// Value and currency
 			amount: amount.value || 0,
 			currency: amount.currency || 'BRL',
-			
+
 			// Customer
 			customerName: (customer as any)?.name || 'N/A',
 			customerEmail: (customer as any)?.email || 'N/A',
-			
+
 			// Payment method
 			paymentMethod: paymentMethod.type || 'UNKNOWN',
 			paidAt: paidAt,
-			
+
 			// Timestamp
 			receivedAt: new Date().toISOString(),
 		};
@@ -203,13 +219,24 @@ export class PagBankTrigger implements INodeType {
 		// Add calculated fields if enabled
 		if (addCalculatedFields) {
 			const triggerInstance = new PagBankTrigger();
-			processedData.event = triggerInstance.getEventType.call(triggerInstance, status, paymentMethod.type);
-			processedData.paymentMethodFormatted = triggerInstance.getPaymentMethodFormatted.call(triggerInstance, paymentMethod.type);
-			processedData.statusFormatted = triggerInstance.getStatusFormatted.call(triggerInstance, status);
-			processedData.declineReason = triggerInstance.getDeclineReason.call(triggerInstance, paymentResponse);
-			processedData.isPaid = status === 'PAID';
-			processedData.isWaiting = status === 'WAITING';
-			processedData.isDeclined = status === 'DECLINED';
+			processedData.event =
+				webhookEvent ||
+				triggerInstance.getEventType.call(triggerInstance, status, paymentMethod.type);
+			processedData.paymentMethodFormatted = triggerInstance.getPaymentMethodFormatted.call(
+				triggerInstance,
+				paymentMethod.type,
+			);
+			processedData.statusFormatted = triggerInstance.getStatusFormatted.call(
+				triggerInstance,
+				orderStatus,
+			);
+			processedData.declineReason = triggerInstance.getDeclineReason.call(
+				triggerInstance,
+				paymentResponse,
+			);
+			processedData.isPaid = orderStatus === 'PAID' || status === 'PAID';
+			processedData.isWaiting = orderStatus === 'WAITING' || status === 'WAITING';
+			processedData.isDeclined = orderStatus === 'DECLINED' || status === 'DECLINED';
 		}
 
 		// Add raw data for debug
@@ -244,9 +271,10 @@ export class PagBankTrigger implements INodeType {
 
 	private getPaymentMethodFormatted(paymentMethod: string): string {
 		const methods: { [key: string]: string } = {
-			'PIX': 'PIX',
-			'CREDIT_CARD': 'Credit Card',
-			'BOLETO': 'Bank Slip',
+			PIX: 'PIX',
+			CREDIT_CARD: 'Credit Card',
+			CREDIT_CARD_3DS: 'Credit Card (3DS)',
+			BOLETO: 'Bank Slip',
 		};
 		return methods[paymentMethod] || paymentMethod;
 	}

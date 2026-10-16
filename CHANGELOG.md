@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.0] - 2026-10-16
+
+### Added
+- **Refund / Cancel Charge** — `POST …/charges/{id}/cancel` for PagBank (v7) and Vindi (v1); optional partial amount in cents
+- **Dual partner (PagBank + Vindi)** — Connect Key prefix routes automatically:
+  - `CON…` / `CONSANDBOX…` → `ws.pbintegracoes.com/pspro/v7`
+  - `CONVD…` / `CONVDSANDBOX…` → `api.pbintegracoes.com/v1`
+- **Vindi card tokenization** — server-side equivalent of the public `payment_profiles` JS flow (`GET /tokenize/config` → Basic auth → `gateway_token` on `POST /orders`)
+- Credential test on the PagBank node routes `connectInfo` by partner
+- Trigger exposes `partner`, `partnerBillId`, `webhookEvent` (canonical PB / Vindi relay payloads)
+
+### Changed
+- **Public display names** — “PB Integrações (former PagBank Connect)” (node, trigger, credentials). Package name `n8n-nodes-pagbank-connect` and node types `pagBank` / `pagBankTrigger` unchanged
+- **No `?isSandbox=1`** — sandbox is detected by the Connect Key prefix on both v7 and v1
+- Package major version **5.0.0** (aligned with WooCommerce / Magento dual-partner line)
+- Notification URLs over 100 chars set `enable_proxy: true` (Vindi always uses proxy)
+
+### Removed / gated
+- **Payment Link** and **payment split** are PagBank-only; Vindi keys get a clear error (hosted checkout for Vindi not available yet)
+
+---
+
 ## [2.1.0] - 2026-04-07
 
 ### Added
