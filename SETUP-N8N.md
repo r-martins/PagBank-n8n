@@ -96,7 +96,7 @@ npm install /Users/martins/www/pagbank-n8n
 ## 🔑 Passo 4: Configurar Credenciais PagBank
 
 ### 1. Obter Connect Key
-1. Acesse [PagBank Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n)
+1. Acesse [PB Integrações](https://pbintegracoes.com/autorizar/?utm_source=n8n)
 2. Crie uma conta ou faça login
 3. Gere uma Connect Key
 4. **IMPORTANTE**: Use a chave de SANDBOX (CONSANDBOX...) para testes
