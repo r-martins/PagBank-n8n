@@ -3,8 +3,10 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	NodeApiError,
 	NodeConnectionTypes,
 	NodeOperationError,
+	UserError,
 } from 'n8n-workflow';
 
 import {
@@ -15,6 +17,7 @@ import {
 	getConnectKey,
 	parseOrderItems,
 	applyNotificationUrl,
+	assertCustomerTaxId,
 } from './PagBankUtils';
 import {
 	assertNoSplitForVindi,
@@ -42,7 +45,7 @@ function buildOrderSplitsPayload(
 		return undefined;
 	}
 	if (receiverRows.length < 2) {
-		throw new Error('Payment split requires at least 2 receivers. Add another receiver or remove split receivers.');
+		throw new UserError('Payment split requires at least 2 receivers. Add another receiver or remove split receivers.');
 	}
 
 	const receivers: any[] = [];
@@ -50,12 +53,12 @@ function buildOrderSplitsPayload(
 	for (const row of receiverRows) {
 		const accountId = (row.accountId || '').toString().trim();
 		if (!accountId) {
-			throw new Error('Each split receiver must have an Account ID.');
+			throw new UserError('Each split receiver must have an Account ID.');
 		}
 
 		const amountVal = Number(row.amountValue);
 		if (!Number.isFinite(amountVal) || amountVal < 0) {
-			throw new Error('Each split receiver must have a valid amount/percentage value.');
+			throw new UserError('Each split receiver must have a valid amount/percentage value.');
 		}
 
 		const rec: any = {
@@ -99,7 +102,7 @@ function buildOrderSplitsPayload(
 		) {
 			const pct = Number(String(chargebackRaw).trim());
 			if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-				throw new Error('Chargeback percentage must be between 0 and 100.');
+				throw new UserError('Chargeback percentage must be between 0 and 100.');
 			}
 			configurations.chargeback = {
 				charge_transfer: { percentage: Math.round(pct) },
@@ -120,14 +123,14 @@ function buildOrderSplitsPayload(
 	if (splitMethod === 'FIXED') {
 		const sum = receivers.reduce((acc, r) => acc + (r.amount?.value || 0), 0);
 		if (sum !== orderTotalCents) {
-			throw new Error(
+			throw new UserError(
 				`Split amounts (FIXED) must sum to the order total (${orderTotalCents} cents). Current sum: ${sum}.`,
 			);
 		}
 	} else {
 		const sum = receivers.reduce((acc, r) => acc + (r.amount?.value || 0), 0);
 		if (sum !== 100) {
-			throw new Error(
+			throw new UserError(
 				`Split percentages must sum to 100. Current sum: ${sum}.`,
 			);
 		}
@@ -267,14 +270,14 @@ async function resolveChargeIdFromOrder(
 	return chargeId;
 }
 
-export class PagBankSimple implements INodeType {
+export class PagBank implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'PB Integrações (former PagBank Connect)',
+		displayName: 'PB Integrações (Former PagBank Connect)',
 		name: 'pagBank',
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"]}}',
+		subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
 		description:
 			'PagBank and Vindi payments via PB Integrações (Connect Key CON… or CONVD…)',
 		defaults: {
@@ -282,6 +285,7 @@ export class PagBankSimple implements INodeType {
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
+		usableAsTool: true,
 		credentials: [
 			{
 				name: 'pagBankConnect',
@@ -291,63 +295,153 @@ export class PagBankSimple implements INodeType {
 		],
 		properties: [
 			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Payment Link',
+						value: 'paymentLink',
+					},
+					{
+						name: 'Order',
+						value: 'order',
+					},
+					{
+						name: 'Charge',
+						value: 'charge',
+					},
+					{
+						name: 'Connect Key',
+						value: 'connectKey',
+					},
+					{
+						name: 'Split',
+						value: 'split',
+					},
+				],
+				default: 'paymentLink',
+			},
+			{
 				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
 				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['paymentLink'],
+					},
+				},
 				options: [
-				{
-					name: 'Create Payment Link',
-					value: 'createPaymentLink',
-					description: 'Create a payment link',
-					action: 'Create payment link',
-				},
-				{
-					name: 'Create PIX Order',
-					value: 'createPixOrder',
-					description: 'Create an order with PIX payment',
-					action: 'Create PIX order',
-				},
-				{
-					name: 'Get Order Status',
-					value: 'getOrderStatus',
-					description: 'Retrieve the status of an order',
-					action: 'Get order status',
-				},
-				{
-					name: 'Refund / Cancel Charge',
-					value: 'refundCharge',
-					description:
-						'Full or partial refund (PagBank CHAR_… / ORDE_… or Vindi pb_ord_… / charge id). Optional amount in cents for partial.',
-					action: 'Refund or cancel charge',
-				},
-				{
-					name: 'Create Credit Card Charge',
-					value: 'createCreditCardCharge',
-					description: 'Create a direct credit card charge',
-					action: 'Create credit card charge',
-				},
-				{
-					name: 'Get Connect Key',
-					value: 'validateConnectKey',
-					description: 'Retrieve Connect Key information',
-					action: 'Get Connect Key',
-				},
-				{
-					name: 'Get Split Details',
-					value: 'getSplitDetails',
-					description:
-						'Sandbox Connect key → public GET on internal.sandbox.api.pagseguro.com; production key → Connect API. Full sandbox SPLIT URL also works',
-					action: 'Get split details',
-				},
-				{
-					name: 'Release Split Custody',
-					value: 'releaseSplitCustody',
-					description: 'Release custody for one or more receivers before the scheduled date',
-					action: 'Release split custody',
-				},
+					{
+						name: 'Create',
+						value: 'createPaymentLink',
+						description: 'Create a payment link',
+						action: 'Create payment link',
+					},
 				],
 				default: 'createPaymentLink',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['order'],
+					},
+				},
+				options: [
+					{
+						name: 'Create PIX Order',
+						value: 'createPixOrder',
+						description: 'Create an order with PIX payment',
+						action: 'Create PIX order',
+					},
+					{
+						name: 'Create Credit Card Charge',
+						value: 'createCreditCardCharge',
+						description: 'Create a direct credit card charge',
+						action: 'Create credit card charge',
+					},
+					{
+						name: 'Get Status',
+						value: 'getOrderStatus',
+						description: 'Retrieve the status of an order',
+						action: 'Get order status',
+					},
+				],
+				default: 'createPixOrder',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['charge'],
+					},
+				},
+				options: [
+					{
+						name: 'Refund / Cancel',
+						value: 'refundCharge',
+						description:
+							'Full or partial refund (PagBank CHAR_… / ORDE_… or Vindi pb_ord_… / charge id). Optional amount in cents for partial.',
+						action: 'Refund or cancel charge',
+					},
+				],
+				default: 'refundCharge',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['connectKey'],
+					},
+				},
+				options: [
+					{
+						name: 'Get Info',
+						value: 'validateConnectKey',
+						description: 'Retrieve Connect Key information',
+						action: 'Get Connect Key',
+					},
+				],
+				default: 'validateConnectKey',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['split'],
+					},
+				},
+				options: [
+					{
+						name: 'Get Details',
+						value: 'getSplitDetails',
+						description:
+							'Sandbox Connect key → public GET on internal.sandbox.api.pagseguro.com; production key → Connect API. Full sandbox SPLIT URL also works',
+						action: 'Get split details',
+					},
+					{
+						name: 'Release Custody',
+						value: 'releaseSplitCustody',
+						description: 'Release custody for one or more receivers before the scheduled date',
+						action: 'Release split custody',
+					},
+				],
+				default: 'getSplitDetails',
 			},
 			{
 				displayName: 'Customer Name',
@@ -359,6 +453,7 @@ export class PagBankSimple implements INodeType {
 				description: 'Full customer name',
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -372,6 +467,7 @@ export class PagBankSimple implements INodeType {
 				description: 'Full customer name (optional for payment links)',
 				displayOptions: {
 					show: {
+						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -386,6 +482,7 @@ export class PagBankSimple implements INodeType {
 				description: 'Customer email',
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -399,6 +496,7 @@ export class PagBankSimple implements INodeType {
 				description: 'Customer email (optional for payment links)',
 				displayOptions: {
 					show: {
+						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -409,10 +507,12 @@ export class PagBankSimple implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				placeholder: 'e.g. 12345678901',
-				description: 'Customer CPF (11 digits) or CNPJ (14 digits)',
+				placeholder: 'e.g. 39053344705 or 12.ABC.345/01DE-35',
+				description:
+					'Customer CPF (11 digits) or CNPJ (14 alphanumeric characters; punctuation is stripped)',
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -422,10 +522,12 @@ export class PagBankSimple implements INodeType {
 				name: 'customerTaxId',
 				type: 'string',
 				default: '',
-				placeholder: 'e.g. 12345678901',
-				description: 'Customer CPF (11 digits) or CNPJ (14 digits) (optional for payment links)',
+				placeholder: 'e.g. 39053344705 or 12.ABC.345/01DE-35',
+				description:
+					'Customer CPF (11 digits) or CNPJ (14 alphanumeric; punctuation stripped). Optional for payment links',
 				displayOptions: {
 					show: {
+						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -442,6 +544,7 @@ export class PagBankSimple implements INodeType {
 				},
 				displayOptions: {
 					show: {
+						resource: ['order', 'paymentLink'],
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -507,6 +610,7 @@ export class PagBankSimple implements INodeType {
 					'How to divide the payment between receivers. FIXED uses amounts in cents; PERCENTAGE uses integer percent per receiver.',
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -524,6 +628,7 @@ export class PagBankSimple implements INodeType {
 				},
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -629,11 +734,12 @@ export class PagBankSimple implements INodeType {
 				default: ['CREDIT_CARD', 'PIX'],
 				displayOptions: {
 					show: {
+						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
 			},
-			// Campos específicos para cobrança em cartão
+			// Card-specific charge fields
 			{
 				displayName: 'Card Data',
 				name: 'cardData',
@@ -641,6 +747,7 @@ export class PagBankSimple implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['createCreditCardCharge'],
 					},
 				},
@@ -708,6 +815,7 @@ export class PagBankSimple implements INodeType {
 				description: 'Order ID to query (same Connect Key that created it)',
 				displayOptions: {
 					show: {
+						resource: ['order'],
 						operation: ['getOrderStatus'],
 					},
 				},
@@ -723,6 +831,7 @@ export class PagBankSimple implements INodeType {
 					'PagBank: charge id (CHAR_…) or order id (ORDE_… — resolved to charge). Vindi: pb_ord_… or partner charge/bill id.',
 				displayOptions: {
 					show: {
+						resource: ['charge'],
 						operation: ['refundCharge'],
 					},
 				},
@@ -736,6 +845,7 @@ export class PagBankSimple implements INodeType {
 					'Leave 0 / empty for full refund. Set a value in cents for partial refund (e.g. 100 = R$ 1,00).',
 				displayOptions: {
 					show: {
+						resource: ['charge'],
 						operation: ['refundCharge'],
 					},
 				},
@@ -751,6 +861,7 @@ export class PagBankSimple implements INodeType {
 					'Get Split Details: with sandbox Connect key, SPLI_ id uses unauthenticated GET on internal.sandbox; with production key, Connect API (ws.pbintegracoes.com). Optional: paste full internal sandbox SPLIT URL. Release Custody: always Connect API.',
 				displayOptions: {
 					show: {
+						resource: ['split'],
 						operation: ['getSplitDetails', 'releaseSplitCustody'],
 					},
 				},
@@ -768,6 +879,7 @@ export class PagBankSimple implements INodeType {
 				},
 				displayOptions: {
 					show: {
+						resource: ['split'],
 						operation: ['releaseSplitCustody'],
 					},
 				},
@@ -797,6 +909,7 @@ export class PagBankSimple implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
+						resource: ['connectKey', 'order', 'paymentLink', 'split'],
 						operation: [
 							'createPaymentLink',
 							'createPixOrder',
@@ -924,7 +1037,7 @@ export class PagBankSimple implements INodeType {
 				const operation = this.getNodeParameter('operation', i) as string;
 				let responseData: any;
 
-				const nodeInstance = new PagBankSimple();
+				const nodeInstance = new PagBank();
 				
 				if (operation === 'createPaymentLink') {
 					responseData = await nodeInstance.createPaymentLink.call(this, i);
@@ -956,8 +1069,12 @@ export class PagBankSimple implements INodeType {
 						json: { error: error.message },
 						pairedItem: { item: i },
 					});
-				} else {
+				} else if (error instanceof NodeOperationError || error instanceof NodeApiError) {
 					throw error;
+				} else {
+					throw new NodeOperationError(this.getNode(), error.message || 'Unexpected error', {
+						itemIndex: i,
+					});
 				}
 			}
 		}
@@ -1018,7 +1135,11 @@ export class PagBankSimple implements INodeType {
 				body.customer.email = customerEmail;
 			}
 			if (customerTaxId) {
-				body.customer.tax_id = customerTaxId.replace(/\D/g, '');
+				try {
+					body.customer.tax_id = assertCustomerTaxId(customerTaxId);
+				} catch (e: any) {
+					throw new NodeOperationError(this.getNode(), e.message);
+				}
 			}
 		}
 
@@ -1086,12 +1207,19 @@ export class PagBankSimple implements INodeType {
 			throw new NodeOperationError(this.getNode(), e.message);
 		}
 
+		let taxId: string;
+		try {
+			taxId = assertCustomerTaxId(customerTaxId);
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
+		}
+
 		const body: any = {
 			reference_id: referenceId || `PIX-${Date.now()}`,
 			customer: {
 				name: customerName,
 				email: customerEmail,
-				tax_id: customerTaxId.replace(/\D/g, ''),
+				tax_id: taxId,
 			},
 			items: items.map((item: any, index: number) => ({
 				reference_id: item.reference_id || `ITEM-${index + 1}`,
@@ -1247,7 +1375,7 @@ export class PagBankSimple implements INodeType {
 			...validation,
 			connectKey: connectKey.substring(0, 10) + '...',
 			partner: getPartner(connectKey),
-			environment: isSandboxConnectKey(connectKey) ? 'Sandbox' : 'Produção',
+			environment: isSandboxConnectKey(connectKey) ? 'Sandbox' : 'Production',
 			validatedAt: new Date().toISOString(),
 		};
 	}
@@ -1305,7 +1433,7 @@ export class PagBankSimple implements INodeType {
 			throw new NodeOperationError(this.getNode(), e.message);
 		}
 
-		const nodeInstance = new PagBankSimple();
+		const nodeInstance = new PagBank();
 		const vindi = isVindiKey(connectKey);
 
 		let cardPayload: { encrypted?: string; gateway_token?: string; store?: boolean };
@@ -1331,7 +1459,7 @@ export class PagBankSimple implements INodeType {
 		}
 
 		const charge: any = {
-			description: `Pagamento via cartão - ${items.map((item: any) => item.name).join(', ')}`,
+			description: `Card payment - ${items.map((item: any) => item.name).join(', ')}`,
 			amount: {
 				value: orderTotalCents,
 				currency: 'BRL',
@@ -1343,11 +1471,18 @@ export class PagBankSimple implements INodeType {
 			charge.splits = splitsPayload;
 		}
 
+		let taxId: string;
+		try {
+			taxId = assertCustomerTaxId(customerTaxId);
+		} catch (e: any) {
+			throw new NodeOperationError(this.getNode(), e.message);
+		}
+
 		const body: any = {
 			customer: {
 				name: customerName,
 				email: customerEmail,
-				tax_id: String(customerTaxId || '').replace(/\D/g, ''),
+				tax_id: taxId,
 			},
 			items: items.map((item: any, index: number) => ({
 				reference_id: item.reference_id || `ITEM-${index + 1}`,

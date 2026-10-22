@@ -10,11 +10,12 @@ import {
 
 export class PagBankTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'PB Integrações Trigger (former PagBank Connect)',
+		displayName: 'PB Integrações (Former PagBank Connect) Trigger',
 		name: 'pagBankTrigger',
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['trigger'],
 		version: 1,
+		subtitle: 'Payment notification',
 		description:
 			'Receive PB Integrações payment notifications (PagBank or Vindi canonical payloads)',
 		documentationUrl: 'https://ajuda.pbintegracoes.com/hc/pt-br/articles/40055875188621-Como-testar-as-Triggers-Webhooks-do-PagBank-no-n8n',
@@ -100,7 +101,7 @@ export class PagBankTrigger implements INodeType {
 				name: 'addCalculatedFields',
 				type: 'boolean',
 				default: true,
-				description: 'Adds calculated fields like event, formatted payment method, etc.',
+				description: 'Whether to add calculated fields like event, formatted payment method, etc',
 			},
 		],
 	};

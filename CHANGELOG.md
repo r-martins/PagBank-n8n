@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.1] - 2026-10-22
+
+### Added
+- **Alphanumeric CNPJ** — accepts masks like `AX.B5T.R89/0001-64` / `12.ABC.345/01DE-35`; strips non-alphanumeric characters and validates with Receita Federal módulo 11 (ASCII − 48). Numeric CNPJ and CPF unchanged
+
+### Fixed
+- **API error messages** — HTTP 4xx/5xx from PagBank/Vindi now surface partner `error_messages` (and similar) instead of a generic “Request failed with status code 400”. Uses `ignoreHttpStatusErrors` + `returnFullResponse` so n8n’s `NodeApiError` wrap does not drop the response body
+- **CPF/CNPJ pre-validation** — invalid tax ids fail in the node with a clear message before calling the API
+
+### Changed
+- **n8n community verification** — credential class/icon/displayName aligned with review (`PagBankConnectApi`, icon, `… API`); credential **type id stays `pagBankConnect`** so existing installs keep working
+- Node file `PagBank.node.ts`, Resource/Operation pattern, `usableAsTool`, English-only user-facing strings, codex `node` / `nodeVersion` (JSON copied into `dist` on build)
+- Trigger display name ends with `Trigger`; boolean descriptions follow n8n lint conventions
+- Credential help links updated to `pbintegracoes.com/autorizar` and `pbintegracoes.com/sandbox` (with `utm_source=n8n`)
+
+---
+
+
 ## [5.0.0] - 2026-10-16
 
 ### Added
