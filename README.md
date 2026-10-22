@@ -40,9 +40,9 @@ API calls send `Platform-Version` (host n8n) and `Module-Version` (this package)
 
 ### 1. Get Credentials
 
-Visit [PB Integrações Connect](https://pbintegracoes.com/connect/autorizar/?utm_source=n8n) for a production Connect Key.
+Visit [PB Integrações](https://pbintegracoes.com/autorizar/?utm_source=n8n) for a production Connect Key.
 
-Sandbox: [connect/sandbox](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n) — PagBank keys start with `CONSANDBOX`; Vindi keys with `CONVDSANDBOX`.
+Sandbox / test credentials: [pbintegracoes.com/sandbox](https://pbintegracoes.com/sandbox/?utm_source=n8n) — PagBank keys start with `CONSANDBOX`; Vindi keys with `CONVDSANDBOX`.
 
 | Key prefix | Partner | API |
 |------------|---------|-----|
@@ -53,8 +53,8 @@ Never call PagBank or Vindi hosts directly with the Connect Key. Never send `?is
 
 ### 2. Configure in n8n
 
-1. Add your Connect Key in **PagBank Connect** credentials
-2. Save — the PagBank node credential test routes `connectInfo` by partner. You can also run **Validate Connect Key**.
+1. Add your Connect Key in **PB Integrações (Former PagBank Connect) API** credentials
+2. Save — the PagBank node credential test routes `connectInfo` by partner. You can also run **Connect Key → Get Info**.
 
 ## Available Nodes
 
@@ -92,7 +92,7 @@ Required for most operations, except payment link creation.
 ## Environments
 
 ### Sandbox (Test)
-- PagBank: Connect Key starts with `CONSANDBOX` — [get one](https://pbintegracoes.com/connect/sandbox/?utm_source=n8n)
+- PagBank: Connect Key starts with `CONSANDBOX` — [get one](https://pbintegracoes.com/sandbox/?utm_source=n8n)
 - Vindi: Connect Key starts with `CONVDSANDBOX`
 - PagBank sandbox: automatic approval for values under R$ 100; delay for R$ 100–200
 - [PagBank test cards](https://ajuda.pbintegracoes.com/hc/pt-br/articles/22375426666253-Cartões-de-Crédito-para-Testes-PagBank)

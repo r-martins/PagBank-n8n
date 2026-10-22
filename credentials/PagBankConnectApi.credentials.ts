@@ -10,10 +10,16 @@ import {
 	PAGBANK_PLATFORM_VERSION_HEADER,
 } from '../nodes/PagBank/releaseConstants';
 
-export class PagBankConnect implements ICredentialType {
+export class PagBankConnectApi implements ICredentialType {
+	/**
+	 * Keep legacy credential type id so existing n8n installs keep working.
+	 * Class is *Api (lint); renaming `name` to pagBankConnectApi would orphan saved credentials.
+	 */
+	// eslint-disable-next-line n8n-nodes-base/cred-class-field-name-unsuffixed -- preserve pagBankConnect id for existing installs
 	name = 'pagBankConnect';
-	displayName = 'PB Integrações (former PagBank Connect)';
-	documentationUrl = 'https://pbintegracoes.com/connect/autorizar/?utm_source=n8n';
+	displayName = 'PB Integrações (Former PagBank Connect) API';
+	documentationUrl = 'https://pbintegracoes.com/autorizar/?utm_source=n8n';
+	icon = { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' } as const;
 	properties: INodeProperties[] = [
 		{
 			displayName: 'Connect Key',
@@ -22,7 +28,7 @@ export class PagBankConnect implements ICredentialType {
 			typeOptions: { password: true },
 			default: '',
 			description:
-				'PB Integrações Connect Key. PagBank: CON… / CONSANDBOX…. Vindi: CONVD… / CONVDSANDBOX…. Get it at https://pbintegracoes.com/connect/autorizar/?utm_source=n8n (sandbox: /connect/sandbox). Credential test is also available on the PagBank node.',
+				'PB Integrações Connect Key. Get it at https://pbintegracoes.com/autorizar/?utm_source=n8n. Test credentials also available at https://pbintegracoes.com/sandbox/?utm_source=n8n.',
 		},
 	];
 

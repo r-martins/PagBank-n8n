@@ -1,8 +1,15 @@
 const { src, dest, series } = require('gulp');
 
-function buildIcons() {
-	return src('nodes/**/*.svg')
-		.pipe(dest('dist/nodes/'));
+function buildNodeIcons() {
+	return src('nodes/**/*.svg').pipe(dest('dist/nodes/'));
+}
+
+function buildCredentialIcons() {
+	return src('credentials/**/*.svg').pipe(dest('dist/credentials/'));
+}
+
+function buildCodex() {
+	return src('nodes/**/*.node.json').pipe(dest('dist/nodes/'));
 }
 
 function buildLib() {
@@ -10,6 +17,6 @@ function buildLib() {
 	return src('lib/**/*.js', { base: 'lib' }).pipe(dest('dist/lib'));
 }
 
-exports['build:icons'] = buildIcons;
+exports['build:icons'] = series(buildNodeIcons, buildCredentialIcons);
 exports['build:lib'] = buildLib;
-exports['build:all'] = series(buildIcons, buildLib);
+exports['build:all'] = series(buildNodeIcons, buildCredentialIcons, buildCodex, buildLib);

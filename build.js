@@ -37,15 +37,15 @@ try {
     console.log('📁 Copying source files...');
     
     // Copy credentials
-    if (fs.existsSync('credentials/PagBankConnect.credentials.ts')) {
-      fs.copyFileSync('credentials/PagBankConnect.credentials.ts', 'dist/credentials/PagBankConnect.credentials.ts');
-      console.log('✅ PagBankConnect.credentials.ts copied');
+    if (fs.existsSync('credentials/PagBankConnectApi.credentials.ts')) {
+      fs.copyFileSync('credentials/PagBankConnectApi.credentials.ts', 'dist/credentials/PagBankConnectApi.credentials.ts');
+      console.log('✅ PagBankConnectApi.credentials.ts copied');
     }
     
     // Copy nodes
-    if (fs.existsSync('nodes/PagBank/PagBankSimple.node.ts')) {
-      fs.copyFileSync('nodes/PagBank/PagBankSimple.node.ts', 'dist/nodes/PagBank/PagBankSimple.node.ts');
-      console.log('✅ PagBankSimple.node.ts copied');
+    if (fs.existsSync('nodes/PagBank/PagBank.node.ts')) {
+      fs.copyFileSync('nodes/PagBank/PagBank.node.ts', 'dist/nodes/PagBank/PagBank.node.ts');
+      console.log('✅ PagBank.node.ts copied');
     }
     
     if (fs.existsSync('nodes/PagBank/PagBankTrigger.node.ts')) {
@@ -80,13 +80,13 @@ try {
     console.log('✅ PagBankTrigger.node.json copied');
   }
   
-  if (fs.existsSync('nodes/PagBank/PagBankSimple.node.json')) {
+  if (fs.existsSync('nodes/PagBank/PagBank.node.json')) {
     const targetDir = 'dist/nodes/PagBank';
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
-    fs.copyFileSync('nodes/PagBank/PagBankSimple.node.json', 'dist/nodes/PagBank/PagBankSimple.node.json');
-    console.log('✅ PagBankSimple.node.json copied');
+    fs.copyFileSync('nodes/PagBank/PagBank.node.json', 'dist/nodes/PagBank/PagBank.node.json');
+    console.log('✅ PagBank.node.json copied');
   }
 
   // Copy lib/* (PagBank SDK JS + any plain JS under lib) to dist
