@@ -11,12 +11,7 @@ import {
 } from '../nodes/PagBank/releaseConstants';
 
 export class PagBankConnectApi implements ICredentialType {
-	/**
-	 * Keep legacy credential type id so existing n8n installs keep working.
-	 * Class is *Api (lint); renaming `name` to pagBankConnectApi would orphan saved credentials.
-	 */
-	// eslint-disable-next-line n8n-nodes-base/cred-class-field-name-unsuffixed -- preserve pagBankConnect id for existing installs
-	name = 'pagBankConnect';
+	name = 'pagBankConnectApi';
 	displayName = 'PB Integrações (Former PagBank Connect) API';
 	documentationUrl = 'https://pbintegracoes.com/autorizar/?utm_source=n8n';
 	icon = { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' } as const;

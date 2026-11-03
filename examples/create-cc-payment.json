@@ -52,7 +52,7 @@
       "id": "3d1e987f-1416-43c7-b883-55609988df16",
       "name": "PagBank",
       "credentials": {
-        "pagBankConnect": {
+        "pagBankConnectApi": {
           "id": "pROOvlgmsgZ9cgnf",
           "name": "PagBank Connect Sandbox"
         }

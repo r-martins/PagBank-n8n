@@ -3,7 +3,6 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	NodeApiError,
 	NodeConnectionTypes,
 	NodeOperationError,
 	UserError,
@@ -44,13 +43,31 @@ function buildOrderSplitsPayload(
 	if (!receiverRows || !Array.isArray(receiverRows) || receiverRows.length === 0) {
 		return undefined;
 	}
-	if (receiverRows.length < 2) {
-		throw new UserError('Payment split requires at least 2 receivers. Add another receiver or remove split receivers.');
+
+	// Ignore blank UI rows (n8n fixedCollection often leaves an empty entry).
+	const filledRows = receiverRows.filter((row) => {
+		const accountId = (row?.accountId || '').toString().trim();
+		const amountRaw = row?.amountValue;
+		const hasAmount =
+			amountRaw !== undefined &&
+			amountRaw !== null &&
+			String(amountRaw).trim() !== '' &&
+			Number(amountRaw) !== 0;
+		return accountId !== '' || hasAmount;
+	});
+
+	if (filledRows.length === 0) {
+		return undefined;
+	}
+	if (filledRows.length < 2) {
+		throw new UserError(
+			'Payment split requires at least 2 receivers. Add another receiver or clear Split Receivers.',
+		);
 	}
 
 	const receivers: any[] = [];
 
-	for (const row of receiverRows) {
+	for (const row of filledRows) {
 		const accountId = (row.accountId || '').toString().trim();
 		if (!accountId) {
 			throw new UserError('Each split receiver must have an Account ID.');
@@ -227,7 +244,7 @@ async function resolveSplitDetailsRoute(
 		return { mode: 'internalUnauth', url: sandboxPublicUrl };
 	}
 
-	const credentials = await this.getCredentials('pagBankConnect');
+	const credentials = await this.getCredentials('pagBankConnectApi');
 	if (!credentials) {
 		throw new NodeOperationError(this.getNode(), 'PagBank credentials not found');
 	}
@@ -288,7 +305,7 @@ export class PagBank implements INodeType {
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'pagBankConnect',
+				name: 'pagBankConnectApi',
 				required: true,
 				testedBy: 'pagBankConnectApiTest',
 			},
@@ -301,20 +318,20 @@ export class PagBank implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Payment Link',
-						value: 'paymentLink',
-					},
-					{
-						name: 'Order',
-						value: 'order',
-					},
-					{
 						name: 'Charge',
 						value: 'charge',
 					},
 					{
 						name: 'Connect Key',
 						value: 'connectKey',
+					},
+					{
+						name: 'Order',
+						value: 'order',
+					},
+					{
+						name: 'Payment Link',
+						value: 'paymentLink',
 					},
 					{
 						name: 'Split',
@@ -390,7 +407,7 @@ export class PagBank implements INodeType {
 						name: 'Refund / Cancel',
 						value: 'refundCharge',
 						description:
-							'Full or partial refund (PagBank CHAR_… / ORDE_… or Vindi pb_ord_… / charge id). Optional amount in cents for partial.',
+							'Full or partial refund (PagBank CHAR_… / ORDE_… or Vindi pb_ord_… / charge ID). Optional amount in cents for partial.',
 						action: 'Refund or cancel charge',
 					},
 				],
@@ -411,7 +428,7 @@ export class PagBank implements INodeType {
 						name: 'Get Info',
 						value: 'validateConnectKey',
 						description: 'Retrieve Connect Key information',
-						action: 'Get Connect Key',
+						action: 'Get connect key',
 					},
 				],
 				default: 'validateConnectKey',
@@ -431,7 +448,7 @@ export class PagBank implements INodeType {
 						name: 'Get Details',
 						value: 'getSplitDetails',
 						description:
-							'Sandbox Connect key → public GET on internal.sandbox.api.pagseguro.com; production key → Connect API. Full sandbox SPLIT URL also works',
+							'Sandbox Connect key → public GET on internal.sandbox.api.pagseguro.com; production key → Connect API. Full sandbox SPLIT URL also works.',
 						action: 'Get split details',
 					},
 					{
@@ -479,7 +496,6 @@ export class PagBank implements INodeType {
 				default: '',
 				required: true,
 				placeholder: 'e.g. john@example.com',
-				description: 'Customer email',
 				displayOptions: {
 					show: {
 						resource: ['order'],
@@ -524,7 +540,7 @@ export class PagBank implements INodeType {
 				default: '',
 				placeholder: 'e.g. 39053344705 or 12.ABC.345/01DE-35',
 				description:
-					'Customer CPF (11 digits) or CNPJ (14 alphanumeric; punctuation stripped). Optional for payment links',
+					'Customer CPF (11 digits) or CNPJ (14 alphanumeric; punctuation stripped). Optional for payment links.',
 				displayOptions: {
 					show: {
 						resource: ['paymentLink'],
@@ -579,7 +595,7 @@ export class PagBank implements INodeType {
 								description: 'Item quantity',
 							},
 							{
-								displayName: 'Amount (in cents)',
+								displayName: 'Amount (In Cents)',
 								name: 'unit_amount',
 								type: 'number',
 								default: 0,
@@ -591,23 +607,23 @@ export class PagBank implements INodeType {
 				],
 			},
 			{
-				displayName: 'Split Method (optional)',
+				displayName: 'Split Method (Optional)',
 				name: 'splitMethod',
 				type: 'options',
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Fixed Amount (order total in cents, split across receivers)',
+						name: 'Fixed Amount (Order Total In Cents, Split Across Receivers)',
 						value: 'FIXED',
 					},
 					{
-						name: 'Percentage (each receiver gets a %; must sum to 100)',
+						name: 'Percentage (Each Receiver Gets A %; Must Sum To 100)',
 						value: 'PERCENTAGE',
 					},
 				],
 				default: 'FIXED',
 				description:
-					'How to divide the payment between receivers. FIXED uses amounts in cents; PERCENTAGE uses integer percent per receiver.',
+					'How to divide the payment between receivers. FIXED uses amounts in cents; PERCENTAGE uses integer percent per receiver. Payment split is currently PagBank-only (CON…); Vindi (CONVD…) keys will reject split.',
 				displayOptions: {
 					show: {
 						resource: ['order'],
@@ -616,13 +632,13 @@ export class PagBank implements INodeType {
 				},
 			},
 			{
-				displayName: 'Split Receivers (optional)',
+				displayName: 'Split Receivers (Optional)',
 				name: 'splitReceivers',
 				type: 'fixedCollection',
 				default: {},
 				placeholder: 'Add Receiver',
 				description:
-					'Optional. Add 2+ receivers to split the payment (PagBank account IDs). Same pattern as Order Items. Ignored if empty.',
+					'Optional. Add 2+ receivers to split the payment. Leave empty if not splitting. Currently PagBank-only (CON…); ignored/rejected for Vindi (CONVD…).',
 				typeOptions: {
 					multipleValues: true,
 				},
@@ -638,22 +654,55 @@ export class PagBank implements INodeType {
 						name: 'splitReceiverProperties',
 						values: [
 							{
-								displayName: 'Account ID',
+								displayName: 'Account / Affiliate ID',
 								name: 'accountId',
 								type: 'string',
 								default: '',
-								required: true,
-								placeholder: 'e.g. ACCO_XXXX-XXXX-...',
-								description: 'PagBank account ID of the receiver',
+								placeholder: 'e.g. ACCO_… (PagBank) or affiliate ID (Vindi)',
+								description:
+									'Receiver ID: PagBank account ID (ACCO_…) or Vindi affiliate ID, depending on the Connect Key partner. Required only when adding a receiver; leave Split Receivers empty if you are not splitting.',
 							},
 							{
 								displayName: 'Amount or Percentage',
 								name: 'amountValue',
 								type: 'number',
 								default: 0,
-								required: true,
 								description:
 									'For FIXED: value in cents (must sum to order total). For PERCENTAGE: integer percent (must sum to 100).',
+							},
+							{
+								displayName: 'Chargeback %',
+								name: 'chargebackPercentage',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. 0 or 100',
+								description:
+									'Optional. 0–100 per receiver (chargeback allocation). Leave empty to omit. Only one receiver may be 100. May not be supported by all partners.',
+							},
+							{
+								displayName: 'Custody Apply',
+								name: 'custodyApply',
+								type: 'boolean',
+								default: false,
+								description:
+									'Whether custody rules apply to this receiver (see release date below). May not be supported by all partners (e.g. Vindi).',
+							},
+							{
+								displayName: 'Custody Release (ISO 8601)',
+								name: 'custodyReleaseScheduled',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. 2026-10-30T07:22:37+00:00',
+								description:
+									'When money is released to this receiver if custody applies (future date, max 365 days from default policy). May not be supported by all partners (e.g. Vindi).',
+							},
+							{
+								displayName: 'Liable (MCC)',
+								name: 'liable',
+								type: 'boolean',
+								default: false,
+								description:
+									'Whether to use secondary seller MCC for credit card compliance. Ignored for PIX. May not be supported by all partners (e.g. Vindi).',
 							},
 							{
 								displayName: 'Reason',
@@ -668,46 +717,13 @@ export class PagBank implements INodeType {
 								name: 'receiverType',
 								type: 'options',
 								options: [
-									{ name: '(unspecified)', value: '' },
+									{ name: 'Unspecified', value: '' },
 									{ name: 'Primary', value: 'PRIMARY' },
 									{ name: 'Secondary', value: 'SECONDARY' },
 								],
 								default: '',
-								description: 'Optional. Primary vs secondary seller role',
-							},
-							{
-								displayName: 'Custody Apply',
-								name: 'custodyApply',
-								type: 'boolean',
-								default: false,
 								description:
-									'If true, custody rules apply to this receiver (see release date below)',
-							},
-							{
-								displayName: 'Custody Release (ISO 8601)',
-								name: 'custodyReleaseScheduled',
-								type: 'string',
-								default: '',
-								placeholder: 'e.g. 2026-10-30T07:22:37+00:00',
-								description:
-									'When money is released to this receiver if custody applies (future date, max 365 days from default policy)',
-							},
-							{
-								displayName: 'Chargeback %',
-								name: 'chargebackPercentage',
-								type: 'string',
-								default: '',
-								placeholder: 'e.g. 0 or 100',
-								description:
-									'Optional. 0–100 per receiver (chargeback allocation). Leave empty to omit. Only one receiver may be 100.',
-							},
-							{
-								displayName: 'Liable (MCC)',
-								name: 'liable',
-								type: 'boolean',
-								default: false,
-								description:
-									'Credit card only: use secondary seller MCC for compliance. Ignored for PIX.',
+									'Optional. Primary vs secondary seller role. May not be supported by all partners (e.g. Vindi).',
 							},
 						],
 					},
@@ -826,9 +842,9 @@ export class PagBank implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				placeholder: 'e.g. CHAR_…, ORDE_…, pb_ord_…, or numeric charge id',
+				placeholder: 'e.g. CHAR_…, ORDE_…, pb_ord_…, or numeric charge ID',
 				description:
-					'PagBank: charge id (CHAR_…) or order id (ORDE_… — resolved to charge). Vindi: pb_ord_… or partner charge/bill id.',
+					'PagBank: charge ID (CHAR_…) or order ID (ORDE_… — resolved to charge). Vindi: pb_ord_… or partner charge/bill ID.',
 				displayOptions: {
 					show: {
 						resource: ['charge'],
@@ -837,7 +853,7 @@ export class PagBank implements INodeType {
 				},
 			},
 			{
-				displayName: 'Refund Amount (cents, optional)',
+				displayName: 'Refund Amount (Cents, Optional)',
 				name: 'refundAmountCents',
 				type: 'number',
 				default: 0,
@@ -858,7 +874,7 @@ export class PagBank implements INodeType {
 				required: true,
 				placeholder: 'e.g. SPLI_03FF3600-39BB-4873-B31A-0C9EF5912D59 or paste SPLIT href',
 				description:
-					'Get Split Details: with sandbox Connect key, SPLI_ id uses unauthenticated GET on internal.sandbox; with production key, Connect API (ws.pbintegracoes.com). Optional: paste full internal sandbox SPLIT URL. Release Custody: always Connect API.',
+					'Get Split Details: with sandbox Connect key, SPLI_ ID uses unauthenticated GET on internal.sandbox; with production key, Connect API (ws.pbintegracoes.com). Optional: paste full internal sandbox SPLIT URL. Release Custody: always Connect API.',
 				displayOptions: {
 					show: {
 						resource: ['split'],
@@ -873,7 +889,7 @@ export class PagBank implements INodeType {
 				default: {},
 				placeholder: 'Add account',
 				description:
-					'Sellers (PagBank account ids) to release custody for before the scheduled date',
+					'Sellers (PagBank account IDs) to release custody for before the scheduled date',
 				typeOptions: {
 					multipleValues: true,
 				},
@@ -895,7 +911,7 @@ export class PagBank implements INodeType {
 								default: '',
 								required: true,
 								placeholder: 'e.g. ACCO_F608816F-8C91-4DAF-B3B8-B8FC251EDCE7',
-								description: 'PagBank account id of the receiver',
+								description: 'PagBank account ID of the receiver',
 							},
 						],
 					},
@@ -923,20 +939,11 @@ export class PagBank implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Reference ID',
-						name: 'referenceId',
-						type: 'string',
-						default: '',
-						placeholder: 'e.g. order123',
-						description: 'Unique ID to identify the order in your system',
-					},
-					{
-						displayName: 'Redirect URL',
-						name: 'redirectUrl',
-						type: 'string',
-						default: '',
-						placeholder: 'e.g. https://example.com/success',
-						description: 'URL where the customer will be redirected after payment',
+						displayName: 'Installments',
+						name: 'installments',
+						type: 'number',
+						default: 1,
+						description: 'Number of installments (1 to 12)',
 					},
 					{
 						displayName: 'Notification URL',
@@ -948,11 +955,27 @@ export class PagBank implements INodeType {
 							'URL for payment notifications (PagBank Trigger / webhook). URLs over 100 characters automatically use PB Integrações enable_proxy. Vindi always uses the proxy.',
 					},
 					{
-						displayName: 'Installments',
-						name: 'installments',
-						type: 'number',
-						default: 1,
-						description: 'Number of installments (1 to 12)',
+						displayName: 'Redirect URL',
+						name: 'redirectUrl',
+						type: 'string',
+						default: '',
+						placeholder: 'e.g. https://example.com/success',
+						description: 'URL where the customer will be redirected after payment',
+					},
+					{
+						displayName: 'Reference ID',
+						name: 'referenceId',
+						type: 'string',
+						default: '',
+						placeholder: 'e.g. order123',
+						description: 'Unique ID to identify the order in your system',
+					},
+					{
+						displayName: 'Simplify',
+						name: 'simplify',
+						type: 'boolean',
+						default: true,
+						description: 'Whether to return a simplified version of the response instead of the raw data',
 					},
 					{
 						displayName: 'Statement Descriptor',
@@ -961,13 +984,6 @@ export class PagBank implements INodeType {
 						default: '',
 						placeholder: 'e.g. MyCompany',
 						description: 'Name that will appear on customer statement (maximum 13 characters)',
-					},
-					{
-						displayName: 'Simplify',
-						name: 'simplify',
-						type: 'boolean',
-						default: true,
-						description: 'Whether to return a simplified version of the response instead of the raw data',
 					},
 				],
 			},
@@ -987,9 +1003,7 @@ export class PagBank implements INodeType {
 					: 'https://ws.pbintegracoes.com/pspro/v7/connect/connectInfo';
 
 				try {
-					const helpers = this.helpers;
-					const requestFn = helpers.httpRequest || helpers.request;
-					const response = await requestFn.call(helpers, {
+					const response = await this.helpers.httpRequest({
 						method: 'GET',
 						url,
 						headers: {
@@ -1069,13 +1083,17 @@ export class PagBank implements INodeType {
 						json: { error: error.message },
 						pairedItem: { item: i },
 					});
-				} else if (error instanceof NodeOperationError || error instanceof NodeApiError) {
-					throw error;
-				} else {
-					throw new NodeOperationError(this.getNode(), error.message || 'Unexpected error', {
-						itemIndex: i,
-					});
+					continue;
 				}
+				throw new NodeOperationError(
+					this.getNode(),
+					error?.message || 'Unexpected error',
+					{
+						itemIndex: i,
+						description:
+							typeof error?.description === 'string' ? error.description : undefined,
+					},
+				);
 			}
 		}
 

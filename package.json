@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-pagbank-connect",
-  "version": "5.0.1",
+  "version": "5.1.0",
   "description": "PB Integrações (former PagBank Connect) — PagBank and Vindi payments for n8n (PIX, card, payment link, refund, split, webhooks)",
   "keywords": [
     "n8n-community-node-package",

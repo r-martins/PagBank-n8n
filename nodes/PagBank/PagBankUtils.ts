@@ -319,7 +319,7 @@ export function assertCustomerTaxId(taxId: string): string {
 }
 
 export async function getConnectKey(this: IExecuteFunctions): Promise<string> {
-	const credentials = await this.getCredentials('pagBankConnect');
+	const credentials = await this.getCredentials('pagBankConnectApi');
 
 	if (!credentials) {
 		throw new NodeOperationError(this.getNode(), 'PagBank Connect credentials not found');
@@ -379,7 +379,7 @@ export async function pagBankConnectRequest(
 	try {
 		const full = await this.helpers.httpRequestWithAuthentication.call(
 			this,
-			'pagBankConnect',
+			'pagBankConnectApi',
 			options,
 		);
 
@@ -405,12 +405,14 @@ export async function pagBankConnectRequest(
 
 		return responseBody;
 	} catch (error: any) {
-		if (error instanceof NodeOperationError) {
-			throw error;
-		}
-
 		const { message: errorMessage, description: errorDescription } =
-			extractPagBankErrorMessage(error, url);
+			error instanceof NodeOperationError
+				? {
+						message: error.message,
+						description:
+							typeof error.description === 'string' ? error.description : undefined,
+					}
+				: extractPagBankErrorMessage(error, url);
 
 		throw new NodeOperationError(this.getNode(), errorMessage, {
 			description: errorDescription,

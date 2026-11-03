@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.1.0] - 2026-11-04
+
+### Changed
+- **Credential type id** — renamed to `pagBankConnectApi` (n8n community scan requires `-Api`; inline eslint-disable is ignored by their scanner). **Breaking:** recreate / re-select credentials in existing workflows
+- Remaining n8n lint fixes: alphabetized Resource / Additional Fields / split receiver options, boolean descriptions start with “Whether”, no raw error rethrows, drop deprecated `helpers.request`, title case / `ID` / period autofixables
+- `Module-Version` header and package version set to **5.1.0**
+
+---
+
 ## [5.0.1] - 2026-10-22
 
 ### Added
@@ -12,7 +21,7 @@ All notable changes to this project will be documented in this file.
 - **CPF/CNPJ pre-validation** — invalid tax ids fail in the node with a clear message before calling the API
 
 ### Changed
-- **n8n community verification** — credential class/icon/displayName aligned with review (`PagBankConnectApi`, icon, `… API`); credential **type id stays `pagBankConnect`** so existing installs keep working
+- **n8n community verification** — credential class/icon/displayName aligned with review (`PagBankConnectApi`, icon, `… API`)
 - Node file `PagBank.node.ts`, Resource/Operation pattern, `usableAsTool`, English-only user-facing strings, codex `node` / `nodeVersion` (JSON copied into `dist` on build)
 - Trigger display name ends with `Trigger`; boolean descriptions follow n8n lint conventions
 - Credential help links updated to `pbintegracoes.com/autorizar` and `pbintegracoes.com/sandbox` (with `utm_source=n8n`)
