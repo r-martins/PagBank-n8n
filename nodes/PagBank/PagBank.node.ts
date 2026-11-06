@@ -293,8 +293,9 @@ export class PagBank implements INodeType {
 		name: 'pagBank',
 		icon: { light: 'file:pagbank.svg', dark: 'file:pagbank.dark.svg' },
 		group: ['transform'],
-		version: 1,
-		subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
+		version: [1, 2],
+		defaultVersion: 2,
+		subtitle: '={{$parameter["operation"]}}',
 		description:
 			'PagBank and Vindi payments via PB Integrações (Connect Key CON… or CONVD…)',
 		defaults: {
@@ -316,6 +317,11 @@ export class PagBank implements INodeType {
 				name: 'resource',
 				type: 'options',
 				noDataExpression: true,
+				displayOptions: {
+					show: {
+						'@version': [2],
+					},
+				},
 				options: [
 					{
 						name: 'Charge',
@@ -340,6 +346,7 @@ export class PagBank implements INodeType {
 				],
 				default: 'paymentLink',
 			},
+			// Version 1: flat Operation list (pre-resource layout — keeps 2.x / 5.0.x workflows working)
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -347,6 +354,71 @@ export class PagBank implements INodeType {
 				noDataExpression: true,
 				displayOptions: {
 					show: {
+						'@version': [1],
+					},
+				},
+				options: [
+					{
+						name: 'Create Credit Card Charge',
+						value: 'createCreditCardCharge',
+						description: 'Create a direct credit card charge',
+						action: 'Create credit card charge',
+					},
+					{
+						name: 'Create Payment Link',
+						value: 'createPaymentLink',
+						description: 'Create a payment link',
+						action: 'Create payment link',
+					},
+					{
+						name: 'Create PIX Order',
+						value: 'createPixOrder',
+						description: 'Create an order with PIX payment',
+						action: 'Create PIX order',
+					},
+					{
+						name: 'Get Connect Key',
+						value: 'validateConnectKey',
+						description: 'Retrieve Connect Key information',
+						action: 'Get connect key',
+					},
+					{
+						name: 'Get Order Status',
+						value: 'getOrderStatus',
+						description: 'Retrieve the status of an order',
+						action: 'Get order status',
+					},
+					{
+						name: 'Get Split Details',
+						value: 'getSplitDetails',
+						description:
+							'Sandbox Connect key → public GET on internal.sandbox.api.pagseguro.com; production key → Connect API. Full sandbox SPLIT URL also works.',
+						action: 'Get split details',
+					},
+					{
+						name: 'Refund / Cancel Charge',
+						value: 'refundCharge',
+						description:
+							'Full or partial refund (PagBank CHAR_… / ORDE_… or Vindi pb_ord_… / charge ID). Optional amount in cents for partial.',
+						action: 'Refund or cancel charge',
+					},
+					{
+						name: 'Release Split Custody',
+						value: 'releaseSplitCustody',
+						description: 'Release custody for one or more receivers before the scheduled date',
+						action: 'Release split custody',
+					},
+				],
+				default: 'createPaymentLink',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						'@version': [2],
 						resource: ['paymentLink'],
 					},
 				},
@@ -367,6 +439,7 @@ export class PagBank implements INodeType {
 				noDataExpression: true,
 				displayOptions: {
 					show: {
+						'@version': [2],
 						resource: ['order'],
 					},
 				},
@@ -399,6 +472,7 @@ export class PagBank implements INodeType {
 				noDataExpression: true,
 				displayOptions: {
 					show: {
+						'@version': [2],
 						resource: ['charge'],
 					},
 				},
@@ -420,6 +494,7 @@ export class PagBank implements INodeType {
 				noDataExpression: true,
 				displayOptions: {
 					show: {
+						'@version': [2],
 						resource: ['connectKey'],
 					},
 				},
@@ -440,6 +515,7 @@ export class PagBank implements INodeType {
 				noDataExpression: true,
 				displayOptions: {
 					show: {
+						'@version': [2],
 						resource: ['split'],
 					},
 				},
@@ -470,7 +546,6 @@ export class PagBank implements INodeType {
 				description: 'Full customer name',
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -484,7 +559,6 @@ export class PagBank implements INodeType {
 				description: 'Full customer name (optional for payment links)',
 				displayOptions: {
 					show: {
-						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -498,7 +572,6 @@ export class PagBank implements INodeType {
 				placeholder: 'e.g. john@example.com',
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -512,7 +585,6 @@ export class PagBank implements INodeType {
 				description: 'Customer email (optional for payment links)',
 				displayOptions: {
 					show: {
-						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -528,7 +600,6 @@ export class PagBank implements INodeType {
 					'Customer CPF (11 digits) or CNPJ (14 alphanumeric characters; punctuation is stripped)',
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -543,7 +614,6 @@ export class PagBank implements INodeType {
 					'Customer CPF (11 digits) or CNPJ (14 alphanumeric; punctuation stripped). Optional for payment links.',
 				displayOptions: {
 					show: {
-						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -560,7 +630,6 @@ export class PagBank implements INodeType {
 				},
 				displayOptions: {
 					show: {
-						resource: ['order', 'paymentLink'],
 						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -626,7 +695,6 @@ export class PagBank implements INodeType {
 					'How to divide the payment between receivers. FIXED uses amounts in cents; PERCENTAGE uses integer percent per receiver. Payment split is currently PagBank-only (CON…); Vindi (CONVD…) keys will reject split.',
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -644,7 +712,6 @@ export class PagBank implements INodeType {
 				},
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['createPixOrder', 'createCreditCardCharge'],
 					},
 				},
@@ -750,7 +817,6 @@ export class PagBank implements INodeType {
 				default: ['CREDIT_CARD', 'PIX'],
 				displayOptions: {
 					show: {
-						resource: ['paymentLink'],
 						operation: ['createPaymentLink'],
 					},
 				},
@@ -763,7 +829,6 @@ export class PagBank implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['createCreditCardCharge'],
 					},
 				},
@@ -831,7 +896,6 @@ export class PagBank implements INodeType {
 				description: 'Order ID to query (same Connect Key that created it)',
 				displayOptions: {
 					show: {
-						resource: ['order'],
 						operation: ['getOrderStatus'],
 					},
 				},
@@ -847,24 +911,31 @@ export class PagBank implements INodeType {
 					'PagBank: charge ID (CHAR_…) or order ID (ORDE_… — resolved to charge). Vindi: pb_ord_… or partner charge/bill ID.',
 				displayOptions: {
 					show: {
-						resource: ['charge'],
 						operation: ['refundCharge'],
 					},
 				},
 			},
 			{
-				displayName: 'Refund Amount (Cents, Optional)',
-				name: 'refundAmountCents',
-				type: 'number',
-				default: 0,
-				description:
-					'Leave 0 / empty for full refund. Set a value in cents for partial refund (e.g. 100 = R$ 1,00).',
+				displayName: 'Options',
+				name: 'options',
+				type: 'collection',
+				placeholder: 'Add Option',
+				default: {},
 				displayOptions: {
 					show: {
-						resource: ['charge'],
 						operation: ['refundCharge'],
 					},
 				},
+				options: [
+					{
+						displayName: 'Refund Amount (Cents)',
+						name: 'refundAmountCents',
+						type: 'number',
+						default: 0,
+						description:
+							'Leave 0 / empty for full refund. Set a value in cents for partial refund (e.g. 100 = R$ 1,00).',
+					},
+				],
 			},
 			{
 				displayName: 'Split ID',
@@ -877,7 +948,6 @@ export class PagBank implements INodeType {
 					'Get Split Details: with sandbox Connect key, SPLI_ ID uses unauthenticated GET on internal.sandbox; with production key, Connect API (ws.pbintegracoes.com). Optional: paste full internal sandbox SPLIT URL. Release Custody: always Connect API.',
 				displayOptions: {
 					show: {
-						resource: ['split'],
 						operation: ['getSplitDetails', 'releaseSplitCustody'],
 					},
 				},
@@ -895,7 +965,6 @@ export class PagBank implements INodeType {
 				},
 				displayOptions: {
 					show: {
-						resource: ['split'],
 						operation: ['releaseSplitCustody'],
 					},
 				},
@@ -925,7 +994,6 @@ export class PagBank implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
-						resource: ['connectKey', 'order', 'paymentLink', 'split'],
 						operation: [
 							'createPaymentLink',
 							'createPixOrder',
@@ -1297,7 +1365,10 @@ export class PagBank implements INodeType {
 		}
 		// else assume CHAR_… or other charge id
 
-		const amountCents = Number(this.getNodeParameter('refundAmountCents', itemIndex) as number) || 0;
+		const refundOptions = this.getNodeParameter('options', itemIndex, {}) as {
+			refundAmountCents?: number;
+		};
+		const amountCents = Number(refundOptions.refundAmountCents) || 0;
 		const body =
 			amountCents > 0
 				? {

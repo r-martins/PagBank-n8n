@@ -4,7 +4,6 @@ import {
 } from 'n8n-workflow';
 
 import {
-	isSandboxConnectKey,
 	isVindiKey,
 	LogicalEndpoint,
 	resolvePartnerUrl,

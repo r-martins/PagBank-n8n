@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.1.1] - 2026-11-06
+
+### Fixed
+- **Node versioning** — `version: [1, 2]` with `defaultVersion: 2`. Resource + resource-gated Operation selectors only on typeVersion 2; typeVersion 1 keeps the flat Operation list so pre-resource workflows (2.x / 5.0.x) keep working after upgrade
+- **Refund options** — optional refund amount moved into an Options collection for Refund / Cancel
+- Removed unused `isSandboxConnectKey` import in `PagBankUtils.ts`
+
+---
+
 ## [5.1.0] - 2026-11-04
 
 ### Changed
