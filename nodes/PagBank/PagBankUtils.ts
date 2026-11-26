@@ -94,6 +94,13 @@ function tryParseJson(value: unknown): any {
 	}
 }
 
+/** PB API v1 upstream failure codes (`Application::upstreamError`). */
+const PB_V1_UPSTREAM_ERROR_CODES = new Set([
+	'UPSTREAM_ERROR',
+	'MISSING_PRINTABLE_PAYMENT_DATA',
+	'REFUND_REJECTED',
+]);
+
 function looksLikeApiErrorPayload(obj: any): boolean {
 	if (!obj || typeof obj !== 'object') return false;
 	return (
@@ -102,8 +109,133 @@ function looksLikeApiErrorPayload(obj: any): boolean {
 		typeof obj.message === 'string' ||
 		typeof obj.error_description === 'string' ||
 		typeof obj.error === 'string' ||
-		typeof obj.error === 'object'
+		typeof obj.error === 'object' ||
+		(obj.upstream != null && typeof obj.upstream === 'object')
 	);
+}
+
+function isPbV1UpstreamEnvelope(obj: any): boolean {
+	if (!obj || typeof obj !== 'object') return false;
+	if (typeof obj.error === 'string' && PB_V1_UPSTREAM_ERROR_CODES.has(obj.error)) {
+		return true;
+	}
+	return obj.upstream != null && typeof obj.upstream === 'object';
+}
+
+/** Summarize Vindi/partner `upstream.body` (errors / error_messages / gateway_message). */
+function summarizeUpstreamBody(upstreamBody: any): string {
+	if (!upstreamBody || typeof upstreamBody !== 'object') {
+		return '';
+	}
+	if (Array.isArray(upstreamBody.errors) && upstreamBody.errors.length) {
+		return summarizeErrorMessages(upstreamBody.errors).message;
+	}
+	if (Array.isArray(upstreamBody.error_messages) && upstreamBody.error_messages.length) {
+		return summarizeErrorMessages(upstreamBody.error_messages).message;
+	}
+	const bill = upstreamBody.bill;
+	const charges = Array.isArray(bill?.charges) ? bill.charges : [];
+	for (const charge of charges) {
+		const last = Array.isArray(charge?.last_transaction)
+			? charge.last_transaction[0]
+			: charge?.last_transaction;
+		const gw =
+			(typeof last?.gateway_message === 'string' && last.gateway_message.trim()) ||
+			(typeof charge?.gateway_message === 'string' && charge.gateway_message.trim()) ||
+			'';
+		if (gw) return gw;
+	}
+	if (typeof upstreamBody.gateway_message === 'string' && upstreamBody.gateway_message.trim()) {
+		return upstreamBody.gateway_message.trim();
+	}
+	if (typeof upstreamBody.message === 'string' && upstreamBody.message.trim()) {
+		return upstreamBody.message.trim();
+	}
+	return '';
+}
+
+/**
+ * PB v1 envelope: prefer human `message`, never surface bare UPSTREAM_ERROR as the only text.
+ */
+function extractPbV1UpstreamError(responseBody: any): { message: string; description: string } | null {
+	if (!isPbV1UpstreamEnvelope(responseBody)) {
+		return null;
+	}
+
+	const code =
+		typeof responseBody.error === 'string' && PB_V1_UPSTREAM_ERROR_CODES.has(responseBody.error)
+			? responseBody.error
+			: 'UPSTREAM_ERROR';
+	const upstream = responseBody.upstream;
+	const upstreamDetail = summarizeUpstreamBody(upstream?.body);
+	const apiMessage =
+		typeof responseBody.message === 'string' ? responseBody.message.trim() : '';
+
+	let message = apiMessage;
+	if (!message || PB_V1_UPSTREAM_ERROR_CODES.has(message)) {
+		message = upstreamDetail || 'Partner request failed';
+	}
+
+	const descParts: string[] = [];
+	if (typeof responseBody.partner === 'string' && responseBody.partner) {
+		descParts.push(`partner: ${responseBody.partner}`);
+	}
+	if (upstream && typeof upstream === 'object') {
+		if (upstream.status != null) descParts.push(`upstream HTTP ${upstream.status}`);
+		if (typeof upstream.method === 'string' && typeof upstream.path === 'string') {
+			descParts.push(`${upstream.method} ${upstream.path}`);
+		} else if (typeof upstream.path === 'string') {
+			descParts.push(upstream.path);
+		}
+	}
+	if (upstreamDetail && !message.includes(upstreamDetail)) {
+		descParts.push(upstreamDetail);
+	}
+	if (upstream?.body && typeof upstream.body === 'object') {
+		const compact = JSON.stringify(upstream.body);
+		if (compact && compact !== '{}') {
+			descParts.push(compact.length > 220 ? `${compact.slice(0, 220)}…` : compact);
+		}
+	}
+	// Present when client sent debug (body.debug / X-PB-Debug) — redacted partner request.
+	const upstreamRequest = upstream?.request;
+	if (upstreamRequest != null) {
+		const reqBody =
+			typeof upstreamRequest === 'object' && upstreamRequest !== null && 'body' in upstreamRequest
+				? (upstreamRequest as { body?: unknown }).body
+				: upstreamRequest;
+		const reqMethod =
+			typeof upstreamRequest === 'object' &&
+			upstreamRequest !== null &&
+			typeof (upstreamRequest as { method?: unknown }).method === 'string'
+				? (upstreamRequest as { method: string }).method
+				: '';
+		const reqPath =
+			typeof upstreamRequest === 'object' &&
+			upstreamRequest !== null &&
+			typeof (upstreamRequest as { path?: unknown }).path === 'string'
+				? (upstreamRequest as { path: string }).path
+				: '';
+		if (reqMethod || reqPath) {
+			descParts.push(`request: ${[reqMethod, reqPath].filter(Boolean).join(' ')}`);
+		}
+		try {
+			const compactReq = JSON.stringify(reqBody ?? upstreamRequest);
+			if (compactReq && compactReq !== '{}' && compactReq !== 'null') {
+				descParts.push(
+					`request.body: ${compactReq.length > 280 ? `${compactReq.slice(0, 280)}…` : compactReq}`,
+				);
+			}
+		} catch {
+			/* ignore */
+		}
+	}
+	descParts.push(`code: ${code}`);
+
+	return {
+		message,
+		description: descParts.filter(Boolean).join(' | ') || code,
+	};
 }
 
 /** Walk n8n / Axios / cause chains for the partner JSON error body. */
@@ -124,6 +256,11 @@ function pickResponseBody(error: any): any {
 
 		if (typeof cur !== 'object') continue;
 
+		// Prefer PB v1 upstream envelope over nested partner `errors` alone
+		if (isPbV1UpstreamEnvelope(cur)) {
+			return cur;
+		}
+
 		if (looksLikeApiErrorPayload(cur) && (cur.error_messages || cur.errors)) {
 			return cur;
 		}
@@ -138,6 +275,7 @@ function pickResponseBody(error: any): any {
 			'messages',
 			'description',
 			'context',
+			'upstream',
 		]) {
 			if (cur[key] != null) queue.push(cur[key]);
 		}
@@ -238,7 +376,11 @@ function extractPagBankErrorMessage(
 	const responseBody = pickResponseBody(error);
 	const status = httpStatusOf(error);
 
-	if (responseBody?.error_messages && Array.isArray(responseBody.error_messages)) {
+	const pbUpstream = extractPbV1UpstreamError(responseBody);
+	if (pbUpstream) {
+		errorMessage = pbUpstream.message;
+		errorDescription = pbUpstream.description;
+	} else if (responseBody?.error_messages && Array.isArray(responseBody.error_messages)) {
 		({ message: errorMessage, description: errorDescription } = summarizeErrorMessages(
 			responseBody.error_messages,
 		));
@@ -248,12 +390,18 @@ function extractPagBankErrorMessage(
 		));
 	} else if (typeof responseBody?.message === 'string' && responseBody.message.trim()) {
 		errorMessage = responseBody.message;
-		if (typeof responseBody?.error === 'string') {
+		if (
+			typeof responseBody?.error === 'string' &&
+			!PB_V1_UPSTREAM_ERROR_CODES.has(responseBody.error)
+		) {
 			errorDescription = responseBody.error;
 		} else if (typeof responseBody?.error_description === 'string') {
 			errorDescription = responseBody.error_description;
 		}
-	} else if (typeof responseBody?.error === 'string') {
+	} else if (
+		typeof responseBody?.error === 'string' &&
+		!PB_V1_UPSTREAM_ERROR_CODES.has(responseBody.error)
+	) {
 		errorMessage = responseBody.error;
 	} else if (responseBody && typeof responseBody === 'object') {
 		const compact = JSON.stringify(responseBody);
@@ -264,6 +412,7 @@ function extractPagBankErrorMessage(
 	} else if (
 		typeof error?.message === 'string' &&
 		error.message !== 'Request failed' &&
+		!PB_V1_UPSTREAM_ERROR_CODES.has(error.message) &&
 		!/^Request failed with status code \d+$/i.test(error.message)
 	) {
 		errorMessage = error.message;
@@ -361,13 +510,22 @@ export async function pagBankConnectRequest(
 		headers: {
 			'Content-Type': 'application/json',
 			Accept: 'application/json',
+			// Always ask PB API for upstream request/response on errors (v1); v7 ignores unknown header.
+			'X-PB-Debug': '1',
 		},
 		json: true,
 		returnFullResponse: true,
 		ignoreHttpStatusErrors: true,
 	};
 
-	if (body) {
+	if (body && typeof body === 'object' && !Array.isArray(body)) {
+		const methodUpper = String(method || '').toUpperCase();
+		if (methodUpper === 'POST' || methodUpper === 'PUT' || methodUpper === 'PATCH') {
+			options.body = { ...body, debug: true };
+		} else {
+			options.body = body;
+		}
+	} else if (body) {
 		options.body = body;
 	}
 
@@ -397,13 +555,19 @@ export async function pagBankConnectRequest(
 					url,
 				);
 
-			throw new NodeOperationError(this.getNode(), errorMessage, {
-				description: errorDescription,
+			throw buildPagBankNodeError(this.getNode(), errorMessage, errorDescription, {
+				httpStatus: statusCode,
+				url,
+				apiError: responseBody,
 			});
 		}
 
 		return responseBody;
 	} catch (error: any) {
+		if (error instanceof NodeOperationError && (error as PagBankNodeError).pagBankError) {
+			throw error;
+		}
+
 		const { message: errorMessage, description: errorDescription } =
 			error instanceof NodeOperationError
 				? {
@@ -413,10 +577,83 @@ export async function pagBankConnectRequest(
 					}
 				: extractPagBankErrorMessage(error, url);
 
-		throw new NodeOperationError(this.getNode(), errorMessage, {
-			description: errorDescription,
+		const apiError =
+			(error as PagBankNodeError)?.pagBankError?.apiError ??
+			pickResponseBody(error);
+
+		throw buildPagBankNodeError(this.getNode(), errorMessage, errorDescription, {
+			httpStatus: httpStatusOf(error),
+			url,
+			apiError,
 		});
 	}
+}
+
+/** Extra payload attached to NodeOperationError for Continue On Fail. */
+export type PagBankErrorPayload = {
+	httpStatus?: number;
+	url?: string;
+	apiError?: any;
+};
+
+export type PagBankNodeError = NodeOperationError & {
+	pagBankError?: PagBankErrorPayload;
+};
+
+export function buildPagBankNodeError(
+	node: any,
+	message: string,
+	description: string | undefined,
+	payload?: PagBankErrorPayload,
+): PagBankNodeError {
+	const err = new NodeOperationError(node, message, {
+		description,
+	}) as PagBankNodeError;
+	if (payload) {
+		err.pagBankError = payload;
+	}
+	return err;
+}
+
+/**
+ * Structured item JSON when the node has "Continue On Fail" enabled.
+ * Keeps partner envelope (error/message/partner/upstream) so workflows can branch.
+ */
+export function formatContinueOnFailJson(error: any): Record<string, any> {
+	const apiError = (error as PagBankNodeError)?.pagBankError?.apiError;
+	const httpStatus = (error as PagBankNodeError)?.pagBankError?.httpStatus;
+	const requestUrl = (error as PagBankNodeError)?.pagBankError?.url;
+	const description =
+		typeof error?.description === 'string' ? error.description : undefined;
+
+	const out: Record<string, any> = {
+		ok: false,
+		error: error?.message || 'Request failed',
+	};
+
+	if (description) {
+		out.description = description;
+	}
+	if (httpStatus != null) {
+		out.httpStatus = httpStatus;
+	}
+	if (requestUrl) {
+		out.url = requestUrl;
+	}
+
+	if (apiError && typeof apiError === 'object') {
+		if (typeof apiError.error === 'string') out.errorCode = apiError.error;
+		if (typeof apiError.message === 'string' && apiError.message.trim()) {
+			out.message = apiError.message.trim();
+		}
+		if (typeof apiError.partner === 'string') out.partner = apiError.partner;
+		if (apiError.upstream != null) out.upstream = apiError.upstream;
+		if (apiError.debug != null) out.debug = apiError.debug;
+		// Full partner/API envelope for workflows that need every field
+		out.details = apiError;
+	}
+
+	return out;
 }
 
 /** Normalize n8n fixedCollection "Order Items" across UI shapes. */
@@ -613,6 +850,181 @@ export function formatBrazilianAddress(address: any): any {
 		country: address.country || 'BRA',
 		postal_code: address.postalCode || address.postal_code,
 	};
+}
+
+/** Offset (ms) of `timeZone` from UTC at the instant `atMs` (0 when the zone is unknown). */
+function timeZoneOffsetMs(timeZone: string, atMs: number): number {
+	try {
+		const parts = new Intl.DateTimeFormat('en-US', {
+			timeZone,
+			hourCycle: 'h23',
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		}).formatToParts(new Date(atMs));
+		const read = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+		const asUtc = Date.UTC(
+			read('year'),
+			read('month') - 1,
+			read('day'),
+			read('hour'),
+			read('minute'),
+			read('second'),
+		);
+		return asUtc - Math.floor(atMs / 1000) * 1000;
+	} catch {
+		return 0;
+	}
+}
+
+/**
+ * Payment Link expiration → `YYYY-MM-DD HH:MM:SS` in UTC (`2026-12-01 13:00:00`).
+ *
+ * The API writes `expiration_date` straight into a MySQL DATETIME column (no time zone, ISO with
+ * `Z`/milliseconds fails with HTTP 500) and parses it again in the server time zone (UTC) when the
+ * checkout is read. So we always send UTC wall time. An input without offset is interpreted in the
+ * workflow time zone; an input with offset/`Z` is converted. Invalid and past dates are rejected.
+ */
+export function normalizeExpirationDate(
+	raw: unknown,
+	timeZone: string,
+	now: Date = new Date(),
+): string {
+	const value = String(raw ?? '').trim();
+	if (!value) {
+		throw new Error('Expiration Date is empty.');
+	}
+
+	let ms: number;
+	if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) {
+		ms = Date.parse(value);
+	} else {
+		const m = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+		if (!m) {
+			throw new Error(
+				'Expiration Date must be an ISO 8601 date, e.g. 2026-12-31T23:59:00 or 2026-12-31T23:59:00-03:00.',
+			);
+		}
+		const [year, month, day] = [+m[1], +m[2], +m[3]];
+		const [hour, minute, second] = [Number(m[4] ?? 0), Number(m[5] ?? 0), Number(m[6] ?? 0)];
+		const wall = Date.UTC(year, month - 1, day, hour, minute, second);
+		const check = new Date(wall);
+		if (
+			check.getUTCFullYear() !== year ||
+			check.getUTCMonth() !== month - 1 ||
+			check.getUTCDate() !== day ||
+			hour > 23 ||
+			minute > 59 ||
+			second > 59
+		) {
+			throw new Error(
+				'Expiration Date is not a valid date. Use ISO 8601, e.g. 2026-12-31T23:59:00 or 2026-12-31T23:59:00-03:00.',
+			);
+		}
+		ms = wall - timeZoneOffsetMs(timeZone, wall);
+		ms = wall - timeZoneOffsetMs(timeZone, ms); // refine around DST changes
+	}
+
+	if (Number.isNaN(ms)) {
+		throw new Error(
+			'Expiration Date is not a valid date. Use ISO 8601, e.g. 2026-12-31T23:59:00 or 2026-12-31T23:59:00-03:00.',
+		);
+	}
+	if (ms <= now.getTime()) {
+		throw new Error('Expiration Date must be in the future.');
+	}
+	return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/**
+ * Default item `reference_id` when the user leaves "Reference" empty.
+ *
+ * PagBank keeps `ITEM-n`. Vindi (CONVD…) keeps a per-account product catalog keyed by this
+ * code: it is case-insensitive on create but case-sensitive on lookup (`ITEM-1` vs an existing
+ * `item-1` => HTTP 500), and the first name sticks on the invoice. So for Vindi we send a stable,
+ * lowercase code derived from name + unit amount: same item reuses the product, a renamed or
+ * repriced item gets a new product (current name on the invoice).
+ */
+export function defaultItemReferenceId(
+	connectKey: string | undefined | null,
+	item: { name?: string; unit_amount?: number },
+	index: number,
+): string {
+	if (!isVindiKey(connectKey)) {
+		return `ITEM-${index + 1}`;
+	}
+	const slug = String(item.name ?? '')
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 40)
+		.replace(/-+$/g, '');
+	const cents = Math.max(0, Math.round(Number(item.unit_amount) || 0));
+	return slug ? `${slug}-${cents}` : `item-${index + 1}-${cents}`;
+}
+
+/**
+ * Optional customer address (billing) for create order / payment link.
+ * Returns undefined when the user left every field empty, so nothing is sent
+ * (the API then falls back to its own placeholders, which hurts antifraud).
+ * When any field is filled, the Vindi minimum set is required so we never send
+ * a partial address that the API would complete with placeholders.
+ */
+export function buildCustomerAddressPayload(
+	raw: Record<string, unknown> | undefined | null,
+): Record<string, string> | undefined {
+	if (!raw) {
+		return undefined;
+	}
+	const read = (key: string) => String(raw[key] ?? '').trim();
+	const street = read('street');
+	const number = read('number');
+	const complement = read('complement');
+	const locality = read('locality');
+	const city = read('city');
+	const regionCode = read('regionCode').toUpperCase();
+	const postalCode = read('postalCode').replace(/\D+/g, '');
+
+	const anyFilled = [street, number, complement, locality, city, regionCode, postalCode].some(
+		(value) => value !== '',
+	);
+	if (!anyFilled) {
+		return undefined;
+	}
+
+	const missing: string[] = [];
+	if (!street) missing.push('Street');
+	if (!city) missing.push('City');
+	if (!regionCode) missing.push('State (UF)');
+	if (!postalCode) missing.push('Postal Code (CEP)');
+	if (missing.length > 0) {
+		throw new Error(
+			`Customer Address is incomplete: fill ${missing.join(', ')}, or clear all address fields to omit the address.`,
+		);
+	}
+	if (!/^[A-Z]{2}$/.test(regionCode)) {
+		throw new Error('Customer Address: State (UF) must be the 2-letter code, e.g. SP.');
+	}
+	if (postalCode.length !== 8) {
+		throw new Error('Customer Address: Postal Code (CEP) must have 8 digits, e.g. 01001000.');
+	}
+
+	const address: Record<string, string> = {
+		street,
+		city,
+		region_code: regionCode,
+		postal_code: postalCode,
+		country: 'BRA',
+	};
+	if (number) address.number = number;
+	if (complement) address.complement = complement;
+	if (locality) address.locality = locality;
+	return address;
 }
 
 export function getPaymentStatusText(status: string): string {

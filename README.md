@@ -16,7 +16,7 @@ Package slug `n8n-nodes-pagbank-connect` is unchanged (npm / community install c
 - ✅ **PIX** - Instant payments with QR Code
 - ✅ **Credit Card** - PagBank RSA encrypt or Vindi `gateway_token` (server-side tokenize)
 - ✅ **Refund / Cancel** - Full or partial (`POST …/charges/{id}/cancel`) for PagBank and Vindi
-- ✅ **Payment Links** - PagBank hosted checkout (not available for Vindi keys yet)
+- ✅ **Payment Links** - PagBank payment link or PB hosted checkout for Vindi keys (`checkout.pbintegracoes.com/c/{id}`)
 - ✅ **Payment split** - PagBank only (FIXED or PERCENTAGE), plus split details and custody release
 - ✅ **Webhooks** - Real-time notifications (canonical PB payload for both partners)
 - ✅ **Sandbox** - `CONSANDBOX…` (PagBank) or `CONVDSANDBOX…` (Vindi)
@@ -59,7 +59,9 @@ Never call PagBank or Vindi hosts directly with the Connect Key. Never send `?is
 ## Available Nodes
 
 ### PB Integrações (Main) — node type `pagBank`
-- **Create Payment Link** - PagBank checkout links only (blocked for `CONVD…`)
+- **Create Payment Link** - PagBank checkout link (`CON…`) or PB hosted checkout (`CONVD…`). The response has `url` and `links` (`rel: PAY`) with the page to send to the buyer. Payment methods: Credit Card, PIX, Bank Slip. Optional **Customer Address** prefills the billing address
+- **Payment Link expiration** - optional **Expiration Date** in Additional Fields (workflow time zone unless you include an offset); after that date the link status becomes `EXPIRED`
+- **Get Payment Link** - `GET /v1/checkouts/{chk_…}` (Vindi keys): status (`OPEN` …), `order_ids`, `links`. Accepts the `chk_…` ID or the checkout page URL; use the same Connect Key that created it
 - **Create PIX Order** - PIX (optional **payment split** on PagBank keys only)
 - **Create Credit Card Charge** - Card PAN in the node → PagBank RSA `encrypted` or Vindi `gateway_token`
 - **Get Order Status** - Same Connect Key that created the order (`ORDE_*` or `pb_ord_*`)

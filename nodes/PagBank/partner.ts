@@ -50,6 +50,7 @@ export type LogicalEndpoint =
 	| 'publicKeys'
 	| 'tokenizeConfig'
 	| 'checkouts'
+	| 'checkout'
 	| 'split'
 	| 'splitCustodyRelease'
 	| 'chargeCancel';
@@ -86,12 +87,17 @@ export function resolvePartnerUrl(
 		case 'tokenizeConfig':
 			return `${API_V1_BASE}/tokenize/config`;
 		case 'checkouts':
-			if (vindi) {
+			// Vindi (CONVD…): PB hosted checkout (POST /v1/checkouts → https://checkout.pbintegracoes.com/c/{id}).
+			return vindi ? `${API_V1_BASE}/checkouts` : `${WS_V7_BASE}/connect/ws/checkouts`;
+		case 'checkout': {
+			// GET /v1/checkouts/{chk_…} (merchant view, Bearer Connect Key). Vindi only.
+			if (!vindi) {
 				throw new Error(
-					'Payment Link is not available for Vindi Connect Keys (CONVD…). Use PIX or Credit Card orders instead.',
+					'Get Payment Link is only available for Vindi Connect Keys (CONVD…).',
 				);
 			}
-			return `${WS_V7_BASE}/connect/ws/checkouts`;
+			return `${API_V1_BASE}/checkouts/${encodeURIComponent(id || '')}`;
+		}
 		case 'split': {
 			if (vindi) {
 				throw new Error('Payment split is not available for Vindi Connect Keys (CONVD…).');

@@ -17,6 +17,11 @@ import {
 	parseOrderItems,
 	applyNotificationUrl,
 	assertCustomerTaxId,
+	formatContinueOnFailJson,
+	buildPagBankNodeError,
+	buildCustomerAddressPayload,
+	defaultItemReferenceId,
+	normalizeExpirationDate,
 } from './PagBankUtils';
 import {
 	assertNoSplitForVindi,
@@ -287,6 +292,95 @@ async function resolveChargeIdFromOrder(
 	return chargeId;
 }
 
+/**
+ * Card orders may return HTTP 201 with charges[0].status DECLINED (gateway refuse).
+ * Surface that as a node error with payment_response details instead of silent success.
+ */
+function assertCreditCardNotDeclined(this: IExecuteFunctions, response: any): void {
+	const charge = Array.isArray(response?.charges) ? response.charges[0] : undefined;
+	const chargeStatus = String(charge?.status || response?.status || '')
+		.trim()
+		.toUpperCase();
+	const paymentResponse = charge?.payment_response || {};
+	const code = String(paymentResponse?.code || '');
+	const isDeclined =
+		chargeStatus === 'DECLINED' ||
+		code === '20001' ||
+		(chargeStatus === 'CANCELED' && code === '20001');
+
+	if (!isDeclined) {
+		return;
+	}
+
+	const raw = paymentResponse?.raw_data || {};
+	const gatewayMessage =
+		(typeof raw.gateway_message === 'string' && raw.gateway_message.trim()) ||
+		(typeof paymentResponse.message === 'string' && paymentResponse.message.trim()) ||
+		'Card payment declined';
+
+	const descParts: string[] = [];
+	if (code) descParts.push(`code: ${code}`);
+	if (paymentResponse.reference) descParts.push(`reference: ${paymentResponse.reference}`);
+	if (paymentResponse.tid) descParts.push(`tid: ${paymentResponse.tid}`);
+	if (raw.authorization_code) descParts.push(`auth: ${raw.authorization_code}`);
+	if (raw.nsu) descParts.push(`nsu: ${raw.nsu}`);
+	if (response?.id) descParts.push(`order: ${response.id}`);
+	if (charge?.id) descParts.push(`charge: ${charge.id}`);
+
+	const debugUpstream = response?.debug?.upstream;
+	if (debugUpstream && typeof debugUpstream === 'object') {
+		try {
+			const compact = JSON.stringify(debugUpstream);
+			if (compact && compact !== '{}') {
+				descParts.push(
+					`debug.upstream: ${compact.length > 280 ? `${compact.slice(0, 280)}…` : compact}`,
+				);
+			}
+		} catch {
+			/* ignore */
+		}
+	}
+
+	throw buildPagBankNodeError(
+		this.getNode(),
+		gatewayMessage,
+		descParts.filter(Boolean).join(' | ') || 'Gateway declined the card charge',
+		{
+			apiError: {
+				error: 'GATEWAY_DECLINED',
+				message: gatewayMessage,
+				partner: response?.partner,
+				payment_response: paymentResponse,
+				order_id: response?.id,
+				charge_id: charge?.id,
+				status: chargeStatus,
+				debug: response?.debug,
+			},
+		},
+	);
+}
+
+/**
+ * Adds customer.address only when the user filled the optional Customer Address collection.
+ * Empty collection = no address key in the body (no placeholders are created by the node).
+ */
+function applyCustomerAddress(this: IExecuteFunctions, body: any, itemIndex: number): void {
+	const raw = this.getNodeParameter('customerAddress', itemIndex, {}) as {
+		address?: Record<string, unknown>;
+	};
+	let address: Record<string, string> | undefined;
+	try {
+		address = buildCustomerAddressPayload(raw.address);
+	} catch (e: any) {
+		throw new NodeOperationError(this.getNode(), e.message);
+	}
+	if (!address) {
+		return;
+	}
+	body.customer = body.customer ?? {};
+	body.customer.address = address;
+}
+
 export class PagBank implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'PB Integrações (Former PagBank Connect)',
@@ -428,6 +522,12 @@ export class PagBank implements INodeType {
 						value: 'createPaymentLink',
 						description: 'Create a payment link',
 						action: 'Create payment link',
+					},
+					{
+						name: 'Get',
+						value: 'getPaymentLink',
+						description: 'Retrieve a payment link (hosted checkout) by ID — Vindi keys',
+						action: 'Get payment link',
 					},
 				],
 				default: 'createPaymentLink',
@@ -617,6 +717,82 @@ export class PagBank implements INodeType {
 						operation: ['createPaymentLink'],
 					},
 				},
+			},
+			{
+				displayName: 'Customer Address (Optional)',
+				name: 'customerAddress',
+				type: 'fixedCollection',
+				placeholder: 'Add Address',
+				default: {},
+				description:
+					'Billing address (customer.address), sent to the gateway for antifraud. Click Add Address to fill every field at once. Leave it out to send no address. This is not the shipping address.',
+				typeOptions: {
+					multipleValues: false,
+				},
+				displayOptions: {
+					show: {
+						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Address',
+						name: 'address',
+						values: [
+							{
+								displayName: 'Street',
+								name: 'street',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. Avenida Brigadeiro Faria Lima',
+							},
+							{
+								displayName: 'Number',
+								name: 'number',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. 1384',
+							},
+							{
+								displayName: 'Complement',
+								name: 'complement',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. cj 12',
+							},
+							{
+								displayName: 'Neighborhood',
+								name: 'locality',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. Pinheiros',
+							},
+							{
+								displayName: 'City',
+								name: 'city',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. São Paulo',
+							},
+							{
+								displayName: 'State (UF)',
+								name: 'regionCode',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. SP',
+								description: '2-letter state code',
+							},
+							{
+								displayName: 'Postal Code (CEP)',
+								name: 'postalCode',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g. 01452002',
+								description: '8 digits; punctuation is stripped',
+							},
+						],
+					},
+				],
 			},
 			{
 				displayName: 'Order Items',
@@ -887,6 +1063,21 @@ export class PagBank implements INodeType {
 				],
 			},
 			{
+				displayName: 'Payment Link ID',
+				name: 'checkoutId',
+				type: 'string',
+				default: '',
+				required: true,
+				placeholder: 'e.g. chk_… or https://checkout.pbintegracoes.com/c/chk_…',
+				description:
+					'Checkout ID returned by Create Payment Link (same Connect Key that created it). You can also paste the checkout page URL.',
+				displayOptions: {
+					show: {
+						operation: ['getPaymentLink'],
+					},
+				},
+			},
+			{
 				displayName: 'Order ID',
 				name: 'orderId',
 				type: 'string',
@@ -994,21 +1185,27 @@ export class PagBank implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
-						operation: [
-							'createPaymentLink',
-							'createPixOrder',
-							'createCreditCardCharge',
-							'getOrderStatus',
-							'validateConnectKey',
-							'getSplitDetails',
-							'releaseSplitCustody',
-						],
+						operation: ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'],
 					},
 				},
 				options: [
 					{
+						displayName: 'Expiration Date',
+						name: 'expirationDate',
+						displayOptions: {
+							show: { '/operation': ['createPaymentLink'] },
+						},
+						type: 'dateTime',
+						default: '',
+						description:
+							'Payment Link only. The link stops accepting payments after this date and its status becomes EXPIRED. Without a time zone offset, the workflow time zone is used. Leave empty for no expiration.',
+					},
+					{
 						displayName: 'Installments',
 						name: 'installments',
+						displayOptions: {
+							show: { '/operation': ['createCreditCardCharge'] },
+						},
 						type: 'number',
 						default: 1,
 						description: 'Number of installments (1 to 12)',
@@ -1016,6 +1213,9 @@ export class PagBank implements INodeType {
 					{
 						displayName: 'Notification URL',
 						name: 'notificationUrl',
+						displayOptions: {
+							show: { '/operation': ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'] },
+						},
 						type: 'string',
 						default: '',
 						placeholder: 'e.g. https://example.com/webhook',
@@ -1025,6 +1225,9 @@ export class PagBank implements INodeType {
 					{
 						displayName: 'Redirect URL',
 						name: 'redirectUrl',
+						displayOptions: {
+							show: { '/operation': ['createPaymentLink'] },
+						},
 						type: 'string',
 						default: '',
 						placeholder: 'e.g. https://example.com/success',
@@ -1033,25 +1236,25 @@ export class PagBank implements INodeType {
 					{
 						displayName: 'Reference ID',
 						name: 'referenceId',
+						displayOptions: {
+							show: { '/operation': ['createPaymentLink', 'createPixOrder', 'createCreditCardCharge'] },
+						},
 						type: 'string',
 						default: '',
 						placeholder: 'e.g. order123',
 						description: 'Unique ID to identify the order in your system',
 					},
 					{
-						displayName: 'Simplify',
-						name: 'simplify',
-						type: 'boolean',
-						default: true,
-						description: 'Whether to return a simplified version of the response instead of the raw data',
-					},
-					{
 						displayName: 'Statement Descriptor',
 						name: 'softDescriptor',
+						displayOptions: {
+							show: { '/operation': ['createCreditCardCharge'] },
+						},
 						type: 'string',
 						default: '',
 						placeholder: 'e.g. MyCompany',
-						description: 'Name that will appear on customer statement (maximum 13 characters)',
+						description:
+							'Name that will appear on customer statement (maximum 13 characters). Not supported in some providers.',
 					},
 				],
 			},
@@ -1123,6 +1326,8 @@ export class PagBank implements INodeType {
 				
 				if (operation === 'createPaymentLink') {
 					responseData = await nodeInstance.createPaymentLink.call(this, i);
+				} else if (operation === 'getPaymentLink') {
+					responseData = await nodeInstance.getPaymentLink.call(this, i);
 				} else if (operation === 'createPixOrder') {
 					responseData = await nodeInstance.createPixOrder.call(this, i);
 				} else if (operation === 'createCreditCardCharge') {
@@ -1148,7 +1353,7 @@ export class PagBank implements INodeType {
 			} catch (error: any) {
 				if (this.continueOnFail()) {
 					returnData.push({
-						json: { error: error.message },
+						json: formatContinueOnFailJson(error),
 						pairedItem: { item: i },
 					});
 					continue;
@@ -1170,11 +1375,6 @@ export class PagBank implements INodeType {
 
 	private async createPaymentLink(this: IExecuteFunctions, itemIndex: number): Promise<any> {
 		const connectKey = await getConnectKey.call(this);
-		try {
-			assertPagBankOnlyOperation(connectKey, 'Create Payment Link');
-		} catch (e: any) {
-			throw new NodeOperationError(this.getNode(), e.message);
-		}
 
 		const additionalFields = this.getNodeParameter('additionalFields', itemIndex) as any;
 		const referenceId = additionalFields?.referenceId as string;
@@ -1203,7 +1403,7 @@ export class PagBank implements INodeType {
 		const body: any = {
 			reference_id: referenceId || `PEDIDO-${Date.now()}`,
 			items: items.map((item: any, index: number) => ({
-				reference_id: item.reference_id || `ITEM-${index + 1}`,
+				reference_id: item.reference_id || defaultItemReferenceId(connectKey, item, index),
 				name: item.name,
 				quantity: item.quantity,
 				unit_amount: item.unit_amount,
@@ -1226,6 +1426,19 @@ export class PagBank implements INodeType {
 				} catch (e: any) {
 					throw new NodeOperationError(this.getNode(), e.message);
 				}
+			}
+		}
+
+		applyCustomerAddress.call(this, body, itemIndex);
+
+		if (additionalFields?.expirationDate) {
+			try {
+				body.expiration_date = normalizeExpirationDate(
+					additionalFields.expirationDate,
+					this.getTimezone(),
+				);
+			} catch (e: any) {
+				throw new NodeOperationError(this.getNode(), e.message);
 			}
 		}
 
@@ -1308,7 +1521,7 @@ export class PagBank implements INodeType {
 				tax_id: taxId,
 			},
 			items: items.map((item: any, index: number) => ({
-				reference_id: item.reference_id || `ITEM-${index + 1}`,
+				reference_id: item.reference_id || defaultItemReferenceId(connectKey, item, index),
 				name: item.name,
 				quantity: item.quantity,
 				unit_amount: item.unit_amount,
@@ -1327,6 +1540,8 @@ export class PagBank implements INodeType {
 			body.qr_codes[0].splits = splitsPayload;
 		}
 
+		applyCustomerAddress.call(this, body, itemIndex);
+
 		// Add reference_id only if provided
 		if (referenceId && referenceId.trim()) {
 			body.reference_id = referenceId.trim();
@@ -1336,6 +1551,29 @@ export class PagBank implements INodeType {
 
 		const response = await pagBankConnectRequest.call(this, 'POST', 'orders', body);
 		return response;
+	}
+
+	/** GET /v1/checkouts/{chk_…} — merchant view of a PB hosted checkout (Vindi keys). */
+	private async getPaymentLink(this: IExecuteFunctions, itemIndex: number): Promise<any> {
+		const connectKey = await getConnectKey.call(this);
+		if (!isVindiKey(connectKey)) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Get Payment Link is only available for Vindi Connect Keys (CONVD…).',
+			);
+		}
+
+		const raw = ((this.getNodeParameter('checkoutId', itemIndex) as string) || '').trim();
+		const match = raw.match(/chk_[A-Za-z0-9]+/);
+		if (!match) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Payment Link ID must look like chk_… (or paste the checkout page URL).',
+				{ itemIndex },
+			);
+		}
+
+		return await pagBankConnectRequest.call(this, 'GET', 'checkout', undefined, undefined, match[0]);
 	}
 
 	private async getOrderStatus(this: IExecuteFunctions, itemIndex: number): Promise<any> {
@@ -1574,7 +1812,7 @@ export class PagBank implements INodeType {
 				tax_id: taxId,
 			},
 			items: items.map((item: any, index: number) => ({
-				reference_id: item.reference_id || `ITEM-${index + 1}`,
+				reference_id: item.reference_id || defaultItemReferenceId(connectKey, item, index),
 				name: item.name,
 				quantity: item.quantity,
 				unit_amount: item.unit_amount,
@@ -1586,9 +1824,12 @@ export class PagBank implements INodeType {
 			body.reference_id = referenceId.trim();
 		}
 
+		applyCustomerAddress.call(this, body, itemIndex);
+
 		applyNotificationUrl(body, notificationUrl, connectKey);
 
 		const response = await pagBankConnectRequest.call(this, 'POST', 'orders', body);
+		assertCreditCardNotDeclined.call(this, response);
 		return response;
 	}
 

@@ -2,9 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.0] - 2026-11-26
+
+### Added
+
+- **Payment Link for Vindi keys (**`CONVD…`**)** — Create Payment Link now creates a PB Checkout (`POST /v1/checkouts`, page at `checkout.pbintegracoes.com/c/{id}`) instead of failing. Fields like items, payment methods, customer, Redirect URL, Notification URL, etc. Response includes `url` and `links` (`PAY`, `SELF`, `INACTIVATE`)
+- **Payment Link expiration** — new **Expiration Date** in Additional Fields on Create Payment Link (`expiration_date`). Converted to UTC `YYYY-MM-DD HH:MM:SS` (the format the API stores); a value without offset uses the workflow time zone; invalid or past dates are rejected before the API call (the API would otherwise return a SQL 500 or create a link that never expires). After the date the checkout status is `EXPIRED`
+- **Get Payment Link** — new operation under Payment Link (`GET /v1/checkouts/{chk_…}`, Vindi keys only at this stage). Returns status, `order_ids`, `links`. Accepts the `chk_…` ID or the checkout page URL. 
+- **Vindi default item code** — when an item has no Reference, Vindi keys now send a lowercase `name-amountInCents` code (e.g. `produto-de-teste-7777`) instead of `ITEM-n`. Avoids the Vindi catalog bug where `ITEM-1` fails (HTTP 500) if `item-1` already exists, and shows the current name on the invoice after a rename. 
+- **Customer Address (Optional)** — billing address (`customer.address`) on Create Payment Link, Create PIX Order and Create Credit Card Charge. Add Address opens every field at once. Empty = no address is sent. Shipping address is not collected
+
+### Changed
+
+- **Additional Fields per operation** — each option only shows where it applies: Expiration Date and Redirect URL on Create Payment Link; Installments and Statement Descriptor on Create Credit Card Charge; Reference ID and Notification URL on the three create operations. Get/Status/Split/Validate operations no longer show the collection. Removed the unused **Simplify** option (it had no effect)
+
+### Fixed
+
+- **UPSTREAM_ERROR surfacing** — PB API v1 partner failures (`UPSTREAM_ERROR`, `MISSING_PRINTABLE_PAYMENT_DATA`, `REFUND_REJECTED`) now show the human `message` and a summary of `upstream` (partner, status, path, body) instead of only the error code
+- **Always debug** — Connect requests send `X-PB-Debug: 1` and POST/PUT/PATCH bodies include `debug: true` so error envelopes include redacted `upstream.request`
+- **UPSTREAM + request** — error description includes compact `upstream.request` when present
+- **Card DECLINED** — Create Credit Card Charge treats HTTP 201 with `charges[0].status` DECLINED / `payment_response.code` 20001 as `NodeOperationError` using `payment_response.message` / `gateway_message`
+- **Continue On Fail** — failed items return structured JSON (`ok: false`, `message`, `partner`, `upstream`, `details`, …) instead of only `{ error: message }`, so workflows keep the full API envelope
+
+---
+
 ## [5.1.1] - 2026-11-06
 
 ### Fixed
+
 - **Node versioning** — `version: [1, 2]` with `defaultVersion: 2`. Resource + resource-gated Operation selectors only on typeVersion 2; typeVersion 1 keeps the flat Operation list so pre-resource workflows (2.x / 5.0.x) keep working after upgrade
 - **Refund options** — optional refund amount moved into an Options collection for Refund / Cancel
 - Removed unused `isSandboxConnectKey` import in `PagBankUtils.ts`
@@ -14,6 +39,7 @@ All notable changes to this project will be documented in this file.
 ## [5.1.0] - 2026-11-04
 
 ### Changed
+
 - **Credential type id** — renamed to `pagBankConnectApi` (n8n community scan requires `-Api`; inline eslint-disable is ignored by their scanner). **Breaking:** recreate / re-select credentials in existing workflows
 - Remaining n8n lint fixes: alphabetized Resource / Additional Fields / split receiver options, boolean descriptions start with “Whether”, no raw error rethrows, drop deprecated `helpers.request`, title case / `ID` / period autofixables
 - `Module-Version` header and package version set to **5.1.0**
@@ -23,13 +49,16 @@ All notable changes to this project will be documented in this file.
 ## [5.0.1] - 2026-10-22
 
 ### Added
+
 - **Alphanumeric CNPJ** — accepts masks like `AX.B5T.R89/0001-64` / `12.ABC.345/01DE-35`; strips non-alphanumeric characters and validates with Receita Federal módulo 11 (ASCII − 48). Numeric CNPJ and CPF unchanged
 
 ### Fixed
+
 - **API error messages** — HTTP 4xx/5xx from PagBank/Vindi now surface partner `error_messages` (and similar) instead of a generic “Request failed with status code 400”. Uses `ignoreHttpStatusErrors` + `returnFullResponse` so n8n’s `NodeApiError` wrap does not drop the response body
 - **CPF/CNPJ pre-validation** — invalid tax ids fail in the node with a clear message before calling the API
 
 ### Changed
+
 - **n8n community verification** — credential class/icon/displayName aligned with review (`PagBankConnectApi`, icon, `… API`)
 - Node file `PagBank.node.ts`, Resource/Operation pattern, `usableAsTool`, English-only user-facing strings, codex `node` / `nodeVersion` (JSON copied into `dist` on build)
 - Trigger display name ends with `Trigger`; boolean descriptions follow n8n lint conventions
@@ -37,10 +66,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-
 ## [5.0.0] - 2026-10-16
 
 ### Added
+
 - **Refund / Cancel Charge** — `POST …/charges/{id}/cancel` for PagBank (v7) and Vindi (v1); optional partial amount in cents
 - **Dual partner (PagBank + Vindi)** — Connect Key prefix routes automatically:
   - `CON…` / `CONSANDBOX…` → `ws.pbintegracoes.com/pspro/v7`
@@ -50,12 +79,14 @@ All notable changes to this project will be documented in this file.
 - Trigger exposes `partner`, `partnerBillId`, `webhookEvent` (canonical PB / Vindi relay payloads)
 
 ### Changed
+
 - **Public display names** — “PB Integrações (former PagBank Connect)” (node, trigger, credentials). Package name `n8n-nodes-pagbank-connect` and node types `pagBank` / `pagBankTrigger` unchanged
-- **No `?isSandbox=1`** — sandbox is detected by the Connect Key prefix on both v7 and v1
+- **No** `?isSandbox=1` — sandbox is detected by the Connect Key prefix on both v7 and v1
 - Package major version **5.0.0** (aligned with WooCommerce / Magento dual-partner line)
 - Notification URLs over 100 chars set `enable_proxy: true` (Vindi always uses proxy)
 
 ### Removed / gated
+
 - **Payment Link** and **payment split** are PagBank-only; Vindi keys get a clear error (hosted checkout for Vindi not available yet)
 
 ---
@@ -63,11 +94,13 @@ All notable changes to this project will be documented in this file.
 ## [2.1.0] - 2026-04-07
 
 ### Added
+
 - **Payment split (Orders API)** — On **Create PIX Order** and **Create Credit Card Charge**, optional **Split Method** (FIXED amounts in cents or PERCENTAGE summing to 100) and **Split Receivers** (multi-line, similar to order items) with account id, custody, chargeback %, liable (card), etc.
 - **Get Split Details** — Fetch split by `SPLI_…` or SPLIT href. Sandbox Connect key or internal sandbox URL uses public GET on `internal.sandbox.api.pagseguro.com`; production uses authenticated Connect (`/connect/ws/splits/:id`).
 - **Release Split Custody** — `POST` custody release for selected receiver account ids before the scheduled date.
 
 ### Changed
+
 - **API headers** — `Module-Version` is read from this package’s `package.json`. `Platform-Version` is resolved at runtime (`require('n8n/package.json')`, or `N8N_VERSION` / `N8N_RELEASE_VERSION`, or `PAGBANK_PLATFORM_VERSION`); falls back to `unknown` outside n8n (see README).
 
 ---
@@ -75,6 +108,7 @@ All notable changes to this project will be documented in this file.
 ## [1.3.3] - 2024-10-20
 
 ### 🔧 Marketplace Compliance
+
 - **Replaced console statements**: All console.log/error/warn statements replaced with n8n Logger support
 - **Fixed node structure**: Updated Inputs/Outputs to use `NodeConnectionTypes.Main` as per n8n standards
 - **Removed n8n-workflow from devDependencies**: Cleaned up dependencies to comply with marketplace requirements
@@ -82,10 +116,12 @@ All notable changes to this project will be documented in this file.
 - **Improved field organization**: Moved optional fields to "Additional Fields" collection for better UX
 
 ### 🐛 Bug Fixes
+
 - **Fixed workflow parameter error**: Removed displayOptions from collection child parameters (fixes "Max iterations reached" error)
 - **Fixed collection structure**: Properly organized optional fields in Additional Fields collection
 
 ### 📋 What's Changed
+
 - ✅ All console statements now use optional logger support
 - ✅ Node structure compliant with n8n marketplace standards
 - ✅ Workflow parameter dependencies resolved
@@ -97,16 +133,19 @@ All notable changes to this project will be documented in this file.
 ## [1.3.2] - 2024-10-20
 
 ### 🐛 Bug Fixes
+
 - **Fixed CreatePixOrder endpoint**: Corrected API endpoint from `/connect/ws/checkouts` to `/connect/ws/orders` for PIX order creation
 - **Resolved URL duplication issue**: Fixed double URL construction in `createPixOrder` method that was causing request failures
 - **Improved error handling**: Better error messages for PIX order creation failures
 
 ### 🔧 Technical Improvements
+
 - **API consistency**: All order creation methods now use correct endpoints
 - **Request optimization**: Removed redundant URL construction in `pagBankConnectRequest` calls
 - **Better debugging**: Clearer error messages for troubleshooting
 
 ### 📋 What's Fixed
+
 - ✅ CreatePixOrder now creates PIX orders instead of checkout links
 - ✅ Proper API endpoint usage for all order types
 - ✅ Eliminated "Request failed" errors in PIX order creation
@@ -117,25 +156,30 @@ All notable changes to this project will be documented in this file.
 ## [1.3.0] - 2024-10-15
 
 ### 🚀 Major Changes
+
 - **Removed external dependencies**: Eliminated `n8n-nodes-base` dependency to comply with N8N Community Node requirements
 - **Zero runtime dependencies**: Package now has no dependencies in production, only peer dependencies
 
 ### 🔧 Technical Improvements
+
 - **Fixed icon loading**: Corrected gulpfile to copy icons to the correct location (`dist/nodes/PagBank/`)
 - **Updated build process**: Icons now properly copied during build process
 - **Improved package structure**: Cleaner dependency management with only `n8n-workflow` as peer dependency
 
 ### 📦 Package Changes
+
 - **Dependencies**: Moved from `dependencies` to `peerDependencies` and `devDependencies`
 - **Build optimization**: Streamlined build process for better compatibility
 - **Icon fixes**: Resolved icon display issues in N8N interface
 
 ### 🎯 Compliance
+
 - **N8N Community Node ready**: Package now meets all requirements for N8N Community Node approval
 - **No external dependencies**: Eliminates potential security and compatibility issues
 - **Clean architecture**: Follows N8N best practices for community nodes
 
 ### 🔄 Migration Notes
+
 - No breaking changes for end users
 - All existing functionality preserved
 - Icons now display correctly in N8N interface
@@ -144,6 +188,7 @@ All notable changes to this project will be documented in this file.
 ---
 
 ## [1.2.0] - Previous Version
+
 - Initial release with full PagBank Connect integration
 - Support for PIX, Boleto, Credit Card payments
 - Webhook support for payment notifications
